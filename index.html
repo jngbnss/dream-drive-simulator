@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dream Drive — 강남·송파 드라이브</title>
+    <meta name="description" content="드림카를 타고 서울 강남·송파 도심을 달리는 웹 3D 드라이빙 시뮬레이터" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230b0c10'/%3E%3Cpath d='M6 20c1-4 4-6 8-6.5L18 11h4l4 4v5z' fill='%23d9c7a3'/%3E%3Ccircle cx='10' cy='21' r='2.5' fill='%23f2f2f4'/%3E%3Ccircle cx='22' cy='21' r='2.5' fill='%23f2f2f4'/%3E%3C/svg%3E" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="./src/style.css" />
+  </head>
+  <body>
+    <canvas id="scene"></canvas>
+
+    <!-- 로딩 -->
+    <div id="loading" class="overlay">
+      <div class="loading-card">
+        <div class="brand">DREAM DRIVE</div>
+        <div class="loading-sub">강남 · 송파</div>
+        <div class="bar"><div id="loading-bar"></div></div>
+        <div id="loading-text">준비 중…</div>
+      </div>
+    </div>
+
+    <!-- 쇼룸 패널 -->
+    <div id="showroom" class="panel hidden">
+      <div class="brand small">DREAM DRIVE</div>
+      <h1 id="welcome">당신의 드림카</h1>
+      <p class="model-name">GLC Coupé 스타일 · 참고 모델</p>
+
+      <div class="section-label">외장 색상</div>
+      <div id="paint-swatches" class="swatches"></div>
+      <div id="paint-name" class="swatch-name"></div>
+
+      <div class="section-label">실내 앰비언트 라이트</div>
+      <div id="ambient-swatches" class="swatches"></div>
+
+      <div class="section-label">출발 장소</div>
+      <select id="spawn-select"></select>
+
+      <div class="section-label">시간</div>
+      <div id="time-buttons" class="seg">
+        <button data-time="day">낮</button>
+        <button data-time="sunset" class="active">노을</button>
+        <button data-time="night">밤</button>
+      </div>
+
+      <div class="row">
+        <button id="btn-interior" class="secondary">실내 보기</button>
+        <button id="btn-drive" class="primary">탑승하기</button>
+      </div>
+      <p class="hint">마우스 드래그로 360° 회전 · 휠로 확대</p>
+    </div>
+
+    <!-- 주행 HUD -->
+    <div id="hud" class="hidden">
+      <div id="road-name"></div>
+      <div id="speedo">
+        <div id="speed">0</div>
+        <div class="unit">km/h</div>
+        <div id="gear">P</div>
+        <div id="rpm-bar"><div id="rpm-fill"></div></div>
+      </div>
+      <canvas id="minimap" width="220" height="220"></canvas>
+      <div id="help">
+        <b>W/S</b> 가속·브레이크 &nbsp; <b>A/D</b> 조향 &nbsp; <b>Space</b> 사이드 &nbsp; <b>C</b> 시점 &nbsp; <b>L</b> 라이트
+        &nbsp; <b>R</b> 리셋 &nbsp; <b>M</b> 음소거 &nbsp; <b>Esc</b> 메뉴 &nbsp; <b>H</b> 도움말 숨김
+      </div>
+      <div id="toast"></div>
+    </div>
+
+    <div id="perf" class="hidden"></div>
+    <div id="attribution">지도 데이터 © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a> · 비공식 팬 프로젝트</div>
+
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>
