@@ -27,18 +27,18 @@ export class CarMaterials {
     color: PAINTS[0].color, metalness: 0.7, roughness: 0.32, clearcoat: 1, clearcoatRoughness: 0.03,
   });
   readonly glass = new THREE.MeshPhysicalMaterial({
-    color: 0x080a0e, metalness: 0, roughness: 0.03, transparent: true, opacity: 0.78,
+    color: 0x080a0e, metalness: 0, roughness: 0.03, transparent: true, opacity: 0.86,
     side: THREE.DoubleSide, envMapIntensity: 2.2, depthWrite: false,
   });
 
   /** 실내 시점에서는 유리를 옅게, 외부에서는 실차처럼 짙은 틴트 + 반사 */
   setCabinView(inside: boolean): void {
-    this.glass.opacity = inside ? 0.14 : 0.78;
+    this.glass.opacity = inside ? 0.14 : 0.86;
   }
   readonly blackGloss = new THREE.MeshStandardMaterial({ color: 0x050506, metalness: 0.2, roughness: 0.12 });
   readonly blackMatte = new THREE.MeshStandardMaterial({ color: 0x0c0c0d, metalness: 0, roughness: 0.75 });
   readonly chrome = new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 1, roughness: 0.08 });
-  readonly satinAlu = new THREE.MeshStandardMaterial({ color: 0xc8cacc, metalness: 1, roughness: 0.32 });
+  readonly satinAlu = new THREE.MeshStandardMaterial({ color: 0x8e9196, metalness: 1, roughness: 0.3 });
   readonly tire = new THREE.MeshStandardMaterial({ color: 0x141414, metalness: 0, roughness: 0.92, side: THREE.DoubleSide });
   readonly rim = new THREE.MeshStandardMaterial({ color: 0x9da1a6, metalness: 0.95, roughness: 0.22 });
   readonly rimDark = new THREE.MeshStandardMaterial({ color: 0x2a2c2f, metalness: 0.9, roughness: 0.3 });
@@ -53,7 +53,14 @@ export class CarMaterials {
   readonly taillight = new THREE.MeshStandardMaterial({
     color: 0x3a0306, emissive: 0xff1424, emissiveIntensity: 0.9, metalness: 0.3, roughness: 0.2,
   });
-  readonly reverseLight = new THREE.MeshStandardMaterial({ color: 0x777777, emissive: 0xffffff, emissiveIntensity: 0 });
+  readonly taillightLed = new THREE.MeshStandardMaterial({ color: 0xff3020, emissive: 0xff2a14, emissiveIntensity: 3 });
+  readonly headlightChrome = new THREE.MeshStandardMaterial({ color: 0xb8c0c8, metalness: 1, roughness: 0.18 });
+  readonly cladding =new THREE.MeshStandardMaterial({ color: 0x141516, roughness: 0.8, metalness: 0 });
+  readonly mirrorGlass = new THREE.MeshStandardMaterial({ color: 0x9aa4ad, metalness: 1, roughness: 0.02 });
+  readonly sunroof = new THREE.MeshPhysicalMaterial({ color: 0x05070a, metalness: 0.1, roughness: 0.04, clearcoat: 1, envMapIntensity: 1.8 });
+  readonly paintSeam = new THREE.MeshStandardMaterial({ color: 0x000000, transparent: true, opacity: 0.25, depthWrite: false });
+  readonly grilleMesh: THREE.MeshStandardMaterial;
+  readonly reverseLight =new THREE.MeshStandardMaterial({ color: 0x777777, emissive: 0xffffff, emissiveIntensity: 0 });
   readonly plate: THREE.MeshStandardMaterial;
   readonly grille: THREE.MeshStandardMaterial;
 
@@ -71,8 +78,12 @@ export class CarMaterials {
 
   constructor(plateText = '123가 4567') {
     this.plate = new THREE.MeshStandardMaterial({ map: makePlateTexture(plateText), roughness: 0.4 });
-    this.grille = new THREE.MeshStandardMaterial({ map: makeGrilleTexture(), metalness: 0.6, roughness: 0.25 });
-    this.trimWood = new THREE.MeshStandardMaterial({ map: makeWoodTexture(), roughness: 0.55, metalness: 0 });
+    this.grille = new THREE.MeshStandardMaterial({ map: makeGrilleTexture(), metalness: 0.7, roughness: 0.22 });
+    this.grilleMesh = new THREE.MeshStandardMaterial({ map: makeMeshTexture(), roughness: 0.6 });
+    const wood = makeWoodTexture();
+    wood.wrapS = wood.wrapT = THREE.RepeatWrapping;
+    wood.repeat.set(1.6, 4);
+    this.trimWood = new THREE.MeshStandardMaterial({ map: wood, roughness: 0.5, metalness: 0.1 });
     this.speakerGrille = new THREE.MeshStandardMaterial({ map: makeSpeakerTexture(), metalness: 1, roughness: 0.3 });
   }
 
@@ -118,48 +129,63 @@ function makePlateTexture(text: string) {
   });
 }
 
-/** 다이아몬드 패턴 그릴 (엠블럼 없음) */
+/** C254 그릴: 검은 바탕에 크롬 다이아몬드(작은 마름모) 패턴 */
 function makeGrilleTexture() {
-  return canvasTexture(512, 160, (g) => {
-    g.fillStyle = '#050505';
-    g.fillRect(0, 0, 512, 160);
-    for (let y = 6; y < 160; y += 11) {
-      for (let x = (y / 11) % 2 ? 6 : 12; x < 512; x += 12) {
-        const grd = g.createRadialGradient(x - 1, y - 1, 0, x, y, 4);
+  return canvasTexture(1024, 288, (g) => {
+    g.fillStyle = '#040405';
+    g.fillRect(0, 0, 1024, 288);
+    const step = 17;
+    for (let row = 0, y = 8; y < 288; y += step * 0.8, row++) {
+      for (let x = row % 2 ? 8 : 8 + step / 2; x < 1024; x += step) {
+        const grd = g.createLinearGradient(x - 5, y - 5, x + 5, y + 5);
         grd.addColorStop(0, '#ffffff');
-        grd.addColorStop(1, '#5d6066');
+        grd.addColorStop(0.5, '#9a9ea4');
+        grd.addColorStop(1, '#3c3f44');
         g.fillStyle = grd;
         g.beginPath();
-        g.moveTo(x, y - 3.5);
-        g.lineTo(x + 3.5, y);
-        g.lineTo(x, y + 3.5);
-        g.lineTo(x - 3.5, y);
+        g.moveTo(x, y - 5.5);
+        g.lineTo(x + 6, y);
+        g.lineTo(x, y + 5.5);
+        g.lineTo(x - 6, y);
+        g.closePath();
         g.fill();
       }
     }
-    // 가운데 가로 크롬 루버
-    const lg = g.createLinearGradient(0, 70, 0, 90);
-    lg.addColorStop(0, '#f5f5f5');
-    lg.addColorStop(0.5, '#7b7f85');
-    lg.addColorStop(1, '#e5e5e5');
-    g.fillStyle = lg;
-    g.fillRect(0, 72, 512, 14);
   });
 }
 
-/** 오픈 포어 우드 트림 */
+/** 범퍼 코너 인테이크용 블랙 메시 */
+function makeMeshTexture() {
+  return canvasTexture(128, 128, (g) => {
+    g.fillStyle = '#0a0a0b';
+    g.fillRect(0, 0, 128, 128);
+    g.strokeStyle = '#26282b';
+    g.lineWidth = 2;
+    for (let i = -128; i < 256; i += 10) {
+      g.beginPath(); g.moveTo(i, 0); g.lineTo(i + 128, 128); g.stroke();
+      g.beginPath(); g.moveTo(i + 128, 0); g.lineTo(i, 128); g.stroke();
+    }
+  });
+}
+
+/** 핀스트라이프 우드 트림 (C254 실내: 회갈색 오픈포어 우드에 가는 알루미늄 라인) */
 function makeWoodTexture() {
-  return canvasTexture(1024, 64, (g) => {
-    g.fillStyle = '#3b2618';
-    g.fillRect(0, 0, 1024, 64);
-    for (let i = 0; i < 160; i++) {
-      const y = Math.random() * 64;
-      g.strokeStyle = `rgba(${20 + Math.random() * 30},${10 + Math.random() * 15},5,${0.25 + Math.random() * 0.35})`;
-      g.lineWidth = 0.5 + Math.random() * 1.5;
+  return canvasTexture(1024, 256, (g) => {
+    g.fillStyle = '#5a4c40';
+    g.fillRect(0, 0, 1024, 256);
+    for (let i = 0; i < 120; i++) {
+      const y = Math.random() * 256;
+      g.strokeStyle = `rgba(${40 + Math.random() * 30},${30 + Math.random() * 20},20,${0.08 + Math.random() * 0.12})`;
+      g.lineWidth = 0.6 + Math.random() * 1.2;
       g.beginPath();
       g.moveTo(0, y);
-      for (let x = 0; x <= 1024; x += 64) g.lineTo(x, y + Math.sin(x / 90 + i) * 2.5);
+      for (let x = 0; x <= 1024; x += 64) g.lineTo(x, y + Math.sin(x / 120 + i) * 2);
       g.stroke();
+    }
+    // 가는 금속 라인 (세로 방향 반복)
+    for (let x = 6; x < 1024; x += 14) {
+      g.fillStyle = 'rgba(214,214,210,0.55)';
+      g.fillRect(x, 0, 1.6, 256);
     }
   });
 }

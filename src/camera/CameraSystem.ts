@@ -36,7 +36,7 @@ export class CameraSystem {
     private readonly R: Rapier,
     private readonly world: RAPIER.World,
   ) {
-    this.camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.05, 30000);
+    this.camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.05, 7000);
     this.camera.position.set(6, 2, 6);
     this.orbit = new OrbitControls(this.camera, canvas);
     this.orbit.enableDamping = true;

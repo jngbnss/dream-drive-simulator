@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { CarMaterials } from './materials';
-import { panelYZ, roundedBox, roundedRect } from './geometry';
+import { roundedBox } from './geometry';
+import { buildEmblem } from './Emblem';
 
 /**
  * GLC(X254/C254) 실내 레이아웃 참고:
@@ -38,16 +39,13 @@ export function buildInterior(m: CarMaterials, clusterTex: THREE.Texture, center
   add(new THREE.PlaneGeometry(2.5, 1.5).rotateX(-Math.PI / 2), m.carpet, -0.62, 0.42, 0);
 
   // 헤드라이너 (지붕 안쪽)
-  const hl = add(roundedBox(1.25, 0.03, 1.12, 0.012), m.headliner, -0.62, 1.51, 0);
+  const hl = add(roundedBox(1.0, 0.03, 1.08, 0.012), m.headliner, -0.55, 1.5, 0);
   hl.rotation.z = 0.02;
   for (const s of [-1, 1]) {
     // A필러 내장 트림
     const ap = add(roundedBox(0.72, 0.035, 0.03, 0.012), m.softDash, 0.26, 1.28, s * 0.635);
     ap.rotation.z = -0.58;
     ap.rotation.x = s * 0.2;
-    // C필러 내장
-    const cp = add(roundedBox(0.7, 0.07, 0.06, 0.02), m.headliner, -1.55, 1.3, s * 0.66);
-    cp.rotation.z = 0.5;
   }
 
   // ── 대시보드 ──────────────────────────────────────────────
@@ -56,27 +54,20 @@ export function buildInterior(m: CarMaterials, clusterTex: THREE.Texture, center
   wing.rotation.z = -0.12;
   const trim = add(roundedBox(0.05, 0.05, 1.48, 0.012), m.trimWood, 0.36, 0.895, 0); // 우드 트림 띠
   trim.rotation.z = -0.1;
+  // 조수석 쪽 대형 핀스트라이프 트림 패널 (중앙 화면 옆까지)
+  const bigTrim = add(roundedBox(0.03, 0.13, 0.6, 0.015), m.trimWood, 0.38, 0.85, 0.43);
+  bigTrim.rotation.z = -0.1;
   add(new THREE.BoxGeometry(0.004, 0.003, 1.46), m.ambient, 0.345, 0.868, 0); // 앰비언트 라인
   add(roundedBox(0.36, 0.34, 1.5, 0.06), m.softDash, 0.52, 0.68, 0); // 하단 대시
   const glove = add(roundedBox(0.03, 0.14, 0.5, 0.02), m.leatherBlack, 0.35, 0.74, 0.38);
   glove.rotation.z = -0.15;
 
-  // 송풍구: 중앙 2개 + 양 끝 2개
-  for (const vz of [-0.09, 0.09, -0.68, 0.68]) {
-    const outer = Math.abs(vz) > 0.5;
-    const v = new THREE.Group();
-    v.position.set(outer ? 0.4 : 0.375, 0.945, vz);
-    const w = outer ? 0.12 : 0.16;
-    v.add(new THREE.Mesh(panelYZ(roundedRect(w, 0.055, 0.025), 0.02), m.chrome));
-    const inner = new THREE.Mesh(panelYZ(roundedRect(w - 0.012, 0.043, 0.02), 0.022), m.blackMatte);
-    inner.position.x = 0.002;
-    v.add(inner);
-    for (let i = -1; i <= 1; i++) {
-      const louver = new THREE.Mesh(new THREE.BoxGeometry(0.004, 0.003, w - 0.02), m.satinAlu);
-      louver.position.set(-0.012, i * 0.012, 0);
-      v.add(louver);
-    }
-    v.rotation.z = -0.1;
+  // 송풍구: 중앙 원형 터빈 3개(중앙 화면 위) + 양 끝 원형 2개 — C254/X254 실내 특징
+  for (const [vz, vx, vy, r] of [[-0.135, 0.37, 0.965, 0.048], [0, 0.37, 0.965, 0.048], [0.135, 0.37, 0.965, 0.048], [-0.69, 0.385, 0.95, 0.05], [0.69, 0.385, 0.95, 0.05]]) {
+    const v = buildTurbineVent(m, r);
+    v.position.set(vx, vy, vz);
+    v.rotation.y = -Math.PI / 2; // 앞면이 운전자(-X)를 향함
+    if (Math.abs(vz) > 0.5) v.rotation.y += vz > 0 ? 0.35 : -0.35;
     group.add(v);
   }
 
@@ -95,7 +86,7 @@ export function buildInterior(m: CarMaterials, clusterTex: THREE.Texture, center
   // ── 중앙 디스플레이 (11.9" 세로형) ───────────────────────
   const centerW = 0.175, centerH = 0.245;
   const centerG = new THREE.Group();
-  centerG.position.set(0.345, 0.825, -0.015);
+  centerG.position.set(0.36, 0.79, -0.015);
   centerG.rotation.order = 'YZX';
   centerG.rotation.y = -0.1; // 운전석 쪽으로
   centerG.rotation.z = -0.42;
@@ -108,7 +99,7 @@ export function buildInterior(m: CarMaterials, clusterTex: THREE.Texture, center
 
   // ── 센터 콘솔 ─────────────────────────────────────────────
   add(roundedBox(0.62, 0.2, 0.25, 0.05), m.softDash, 0.0, 0.55, 0).rotation.z = 0.12;
-  add(roundedBox(0.5, 0.025, 0.21, 0.01), m.trimWood, -0.03, 0.665, 0).rotation.z = 0.12;
+  add(roundedBox(0.5, 0.025, 0.21, 0.01), m.pianoBlack, -0.03, 0.665, 0).rotation.z = 0.12;
   add(roundedBox(0.16, 0.012, 0.12, 0.01), m.blackMatte, 0.12, 0.68, 0).rotation.z = 0.12; // 무선 충전
   add(roundedBox(0.08, 0.008, 0.06, 0.004), m.pianoBlack, -0.1, 0.682, 0.02); // 터치패드
   add(roundedBox(0.36, 0.1, 0.24, 0.05), m.leatherBlack, -0.55, 0.68, 0); // 암레스트
@@ -138,9 +129,9 @@ export function buildInterior(m: CarMaterials, clusterTex: THREE.Texture, center
 
   // ── 시트 ─────────────────────────────────────────────────
   for (const s of [-1, 1]) buildSeat(m, group, -0.6, s * 0.37);
-  add(roundedBox(0.5, 0.14, 1.32, 0.06), m.leatherBlack, -1.38, 0.66, 0); // 뒷좌석 쿠션
-  add(roundedBox(0.14, 0.62, 1.34, 0.06), m.leatherBlack, -1.66, 1.0, 0).rotation.z = 0.32;
-  for (const z of [-0.42, 0.42]) add(roundedBox(0.09, 0.16, 0.24, 0.04), m.leatherBlack, -1.72, 1.35, z).rotation.z = 0.32;
+  add(roundedBox(0.5, 0.14, 1.32, 0.06), m.leatherBlack, -1.3, 0.62, 0); // 뒷좌석 쿠션 (쿠페 지붕에 맞춰 낮춤)
+  add(roundedBox(0.14, 0.5, 1.3, 0.06), m.leatherBlack, -1.56, 0.9, 0).rotation.z = 0.36;
+  for (const z of [-0.42, 0.42]) add(roundedBox(0.09, 0.14, 0.22, 0.04), m.leatherBlack, -1.66, 1.2, z).rotation.z = 0.36;
 
   // ── 도어 트림 ─────────────────────────────────────────────
   for (const s of [-1, 1]) {
@@ -208,6 +199,11 @@ function buildSteeringWheel(m: CarMaterials, parent: THREE.Group) {
   hubTrim.rotation.y = Math.PI / 2;
   hubTrim.position.x = -0.017;
   parent.add(hubTrim);
+  // 스티어링 휠 중앙 삼각별 (운전자 쪽 -X를 향함)
+  const star = buildEmblem(0.075, m.chrome, { depth: 0.004 });
+  star.position.x = -0.026;
+  star.rotation.y = -Math.PI / 2;
+  parent.add(star);
   // 트윈 스포크 (좌·우·하단) + 터치 컨트롤 패드
   for (const [ang, len] of [[0, 0.13], [Math.PI, 0.13], [-Math.PI / 2, 0.12]] as [number, number][]) {
     for (const off of [-0.02, 0.02]) {
@@ -260,4 +256,27 @@ function buildSeat(m: CarMaterials, parent: THREE.Group, x: number, z: number) {
   head.position.set(-0.01, 0.73, 0);
   back.add(head);
   parent.add(seat);
+}
+
+/** 원형 "제트 터빈" 송풍구: 크롬 링 + 방사형 블레이드 + 중앙 허브. 앞면 = +Z */
+function buildTurbineVent(m: CarMaterials, r: number): THREE.Group {
+  const g = new THREE.Group();
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(r, r * 0.13, 10, 36), m.chrome);
+  g.add(ring);
+  const back = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.95, r * 0.95, r * 0.6, 28, 1, true).rotateX(Math.PI / 2), m.blackMatte);
+  back.position.z = -r * 0.3;
+  g.add(back);
+  const disc = new THREE.Mesh(new THREE.CircleGeometry(r * 0.95, 28), m.blackMatte);
+  disc.position.z = -r * 0.55;
+  g.add(disc);
+  for (let i = 0; i < 9; i++) {
+    const blade = new THREE.Mesh(new THREE.BoxGeometry(r * 0.85, r * 0.08, r * 0.3), m.satinAlu);
+    blade.position.set(Math.cos((i / 9) * Math.PI * 2) * r * 0.48, Math.sin((i / 9) * Math.PI * 2) * r * 0.48, -r * 0.15);
+    blade.rotation.z = (i / 9) * Math.PI * 2;
+    blade.rotation.x = 0.5;
+    g.add(blade);
+  }
+  const hub = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.22, r * 0.25, r * 0.3, 16).rotateX(Math.PI / 2), m.chrome);
+  g.add(hub);
+  return g;
 }

@@ -11,7 +11,6 @@ import { CarVisual } from './vehicle/CarVisual';
 import { AMBIENTS, PAINTS } from './vehicle/model/materials';
 import { GLC_COUPE_INSPIRED } from './vehicle/VehicleConfig';
 import { VehiclePhysics } from './vehicle/VehiclePhysics';
-import { Traffic } from './ai/Traffic';
 import { City } from './world/City';
 import { Environment, type TimeOfDay } from './world/Environment';
 import { ROAD_CLASS_NAMES, type MapData } from './world/MapData';
@@ -94,8 +93,6 @@ async function boot() {
   progress(0.82, '내비게이션 지도');
   await nextFrame();
   const raster = new MapRaster(map);
-  const traffic = new Traffic(map, RAPIER, world);
-  scene.add(traffic.group);
 
   // ── 차량 ────────────────────────────────────────────────
   progress(0.88, '드림카 준비');
@@ -194,7 +191,6 @@ async function boot() {
     city.setNight(night);
     car.setNight(night);
     car.setLights(night);
-    traffic.setNight(night);
     timeBtns.forEach((b) => b.classList.toggle('active', b.dataset.time === t));
     store.set('time', t);
   }
@@ -218,9 +214,9 @@ async function boot() {
     audio.start();
     $('showroom').classList.add('hidden');
     hud.show(true);
-    cameras.setMode('cockpit');
+    cameras.setMode('chase'); // GTA처럼 3인칭이 기본
     if (mobile && innerHeight > innerWidth) hud.toast('휴대폰을 가로로 돌리면 더 편해요', 4);
-    else hud.toast(mobile ? '‘시점’ 버튼으로 3인칭 ↔ 운전석 전환' : 'C 키로 3인칭 ↔ 운전석 시점 전환', 3.5);
+    else hud.toast(mobile ? '‘시점’ 버튼으로 운전석 시점' : 'C 키로 운전석 시점 ↔ 3인칭 전환', 3.5);
     canvas.focus();
   }
   function stopDriving() {
@@ -279,6 +275,33 @@ async function boot() {
     else if (driving) audio.start();
   });
 
+  // ── 자동 화질: 버벅이면 렌더 해상도를 낮추고, 여유가 있으면 다시 올림 ─────
+  const maxRatio = Math.min(devicePixelRatio, mobile ? 1.25 : 1.75);
+  const minRatio = mobile ? 0.6 : 0.75;
+  let qualityTimer = 3; // 시작 직후(셰이더 컴파일)는 건너뜀
+  function adaptQuality(dt: number) {
+    if ((qualityTimer -= dt) > 0) return;
+    qualityTimer = 1.5;
+    const fps = perf.latest.fps;
+    const r = renderer.getPixelRatio();
+    let next = r;
+    if (fps < 45) next = Math.max(minRatio, r * 0.85);
+    else if (fps > 58 && r < maxRatio) next = Math.min(maxRatio, r * 1.08);
+    if (Math.abs(next - r) > 0.01) {
+      renderer.setPixelRatio(next);
+      renderer.setSize(innerWidth, innerHeight);
+    }
+    // 그래도 느리면 그림자를 끔
+    const wantShadows = !(fps < 30 && next <= minRatio);
+    if (renderer.shadowMap.enabled !== wantShadows && fps > 0) {
+      renderer.shadowMap.enabled = wantShadows;
+      scene.traverse((o) => {
+        const mat = (o as THREE.Mesh).material as THREE.Material | undefined;
+        if (mat) mat.needsUpdate = true;
+      });
+    }
+  }
+
   // ── 루프 ────────────────────────────────────────────────
   let roadTimer = 0;
   let clock = 0;
@@ -290,11 +313,6 @@ async function boot() {
     fixedUpdate(dt) {
       input.update(dt, physics.telemetry.forwardSpeed);
       physics.fixedUpdate(dt, input.state);
-      {
-        const pt = physics.body.translation();
-        const pv = physics.body.linvel();
-        traffic.fixedUpdate(dt, pt.x, pt.z, pv.x, pv.z);
-      }
       perf.measurePhysics(() => world.step());
       physics.afterStep();
       if (physics.body.translation().y < -20) resetToRoad();
@@ -314,8 +332,6 @@ async function boot() {
         showroomFill.position.copy(cameras.camera.position).add(new THREE.Vector3(0, 1.5, 0));
       }
       env.follow(car.root.position);
-      city.update(clock);
-      traffic.render();
       car.materials.setCabinView(cameras.mode === 'cockpit' || cameras.mode === 'interior');
 
       if ((roadTimer -= dt) <= 0) {
@@ -333,16 +349,16 @@ async function boot() {
       renderer.render(scene, cameras.camera);
       cameras.camera.getWorldPosition(camPos);
       perf.endFrame(
-        `건물     ${city.stats.buildings}\n도로     ${city.stats.roads}\n가로수   ${city.stats.trees}\n` +
-        `교통차량 ${traffic.activeCount}
-맵 생성  ${city.stats.buildMs.toFixed(0)} ms\n위치     ${camPos.x.toFixed(0)}, ${camPos.z.toFixed(0)}`,
+        `건물     ${city.stats.buildings}\n도로     ${city.stats.roads}\n해상도   x${renderer.getPixelRatio().toFixed(2)}\n` +
+        `맵 생성  ${city.stats.buildMs.toFixed(0)} ms\n위치     ${camPos.x.toFixed(0)}, ${camPos.z.toFixed(0)}`,
       );
+      adaptQuality(dt);
     },
   });
 
   progress(1, '출발 준비 완료');
   console.info(`[DreamDrive] 맵 다운로드 ${(tMap - tStart).toFixed(0)}ms, 도시 생성 ${city.stats.buildMs.toFixed(0)}ms, 전체 ${(performance.now() - tStart).toFixed(0)}ms`, city.stats);
-  (window as unknown as { __dd: unknown }).__dd = { perf, city, physics, cameras, renderer, traffic };
+  (window as unknown as { __dd: unknown }).__dd = { perf, city, physics, cameras, renderer };
   loop.start();
   $('loading').classList.add('fade');
   $('showroom').classList.remove('hidden');

@@ -1,11 +1,12 @@
 import * as THREE from 'three';
 import type { CarMaterials } from './materials';
 import { arc, panelYZ, roundedBox, roundedRect, sculpt, shapeFrom, smooth, smoothstep, type Vec2 } from './geometry';
+import { buildEmblem } from './Emblem';
 
 /**
  * GLC Coupé(C254) 비율을 참고한 절차적 외관.
  * 좌표: +X 전방, +Y 위, +Z 오른쪽, 지면 y = 0. 전장 4.76m / 전폭 1.89m / 전고 1.60m / 휠베이스 2.89m.
- * 엠블럼·로고는 넣지 않습니다.
+ * 삼각별 엠블럼은 개인 비상업 용도로 사용자 요청에 따라 포함합니다.
  */
 export const AXLE_X = 2.89 / 2;
 const BODY_DEPTH = 1.69; // + 베벨 0.10 × 2 = 전폭 1.89
@@ -74,18 +75,22 @@ function dedupe(pts: Vec2[]): Vec2[] {
   return out;
 }
 
-function distToPolys(x: number, y: number, polys: Vec2[][]): number {
-  let best = Infinity;
-  for (const poly of polys) {
+/** 창문 구멍 근처 판정: 거리 + 법선이 구멍 중심을 향하는지 (외곽 베벨과 구분) */
+function nearWindowHole(x: number, y: number, nx: number, ny: number, maxDist: number): boolean {
+  for (const poly of WINDOWS) {
+    let best = Infinity, cx = 0, cy = 0;
     for (let i = 0; i < poly.length; i++) {
       const [x1, y1] = poly[i];
       const [x2, y2] = poly[(i + 1) % poly.length];
+      cx += x1; cy += y1;
       const dx = x2 - x1, dy = y2 - y1;
       const t = Math.max(0, Math.min(1, ((x - x1) * dx + (y - y1) * dy) / (dx * dx + dy * dy || 1)));
       best = Math.min(best, Math.hypot(x - x1 - t * dx, y - y1 - t * dy));
     }
+    cx /= poly.length; cy /= poly.length;
+    if (best < maxDist && (cx - x) * nx + (cy - y) * ny > 0) return true;
   }
-  return best;
+  return false;
 }
 
 export interface ExteriorParts {
@@ -129,22 +134,25 @@ export function buildExterior(m: CarMaterials): ExteriorParts {
   const ghShape = shapeFrom(greenhouseOutline());
   for (const w of WINDOWS) ghShape.holes.push(new THREE.Path(w.map(([x, y]) => new THREE.Vector2(x, y))));
   const ghGeo = new THREE.ExtrudeGeometry(ghShape, {
-    depth: GH_DEPTH, bevelEnabled: true, bevelThickness: GH_BEVEL_T, bevelSize: 0.05, bevelSegments: 5, steps: 1, curveSegments: 8,
+    depth: GH_DEPTH, bevelEnabled: true, bevelThickness: GH_BEVEL_T, bevelSize: 0.05, bevelSegments: 5, steps: 10, curveSegments: 8,
   });
   ghGeo.translate(0, 0, -GH_DEPTH / 2);
   const gh = sculpt(ghGeo, deformGreenhouse, (t) => {
-    const nearHole = t.group === 1 && distToPolys(t.c0.x, t.c0.y, WINDOWS) < 0.075;
+    const nearHole = t.group === 1 && nearWindowHole(t.c0.x, t.c0.y, t.n.x, t.n.y, 0.075);
     if (nearHole) return Math.abs(t.c0.z) <= GH_DEPTH / 2 + 0.002 ? null : 'trim';
     if (t.group === 1 && t.n.y < -0.5) return null;
     if (t.group === 0) return 'cap';
-    if (t.n.y > 0.5 && t.c.x < -0.08 && t.c.x > -1.12) return 'paint';
+    // 파노라믹 선루프 (지붕 가운데 어두운 유리)
+    if (t.n.y > 0.8 && t.xmid < -0.2 && t.xmid > -1.05 && Math.abs(t.c.z) < 0.4) return 'sunroof';
+    if (t.n.y > 0.5 && t.xmid < -0.08 && t.xmid > -1.12) return 'paint';
     if (Math.abs(t.n.z) > 0.45) return 'paint';
     return 'glass';
   });
   add(gh.paint!, m.paint, 'Paint_Roof');
   analyticCapNormals(gh.cap!, deformGreenhouse, GH_CAP_Z);
   add(gh.cap!, m.paint, 'Paint_Pillars');
-  if (gh.trim) add(gh.trim, m.blackGloss, 'WindowFrame');
+  if (gh.trim) add(gh.trim, m.chrome, 'WindowFrame_Chrome');
+  if (gh.sunroof) add(gh.sunroof, m.sunroof, 'Sunroof', false);
   addGlass(gh.glass!, 'Glass_Screens');
 
   // 옆 유리 (프레임 안쪽으로 살짝 들어감)
@@ -183,130 +191,220 @@ export function buildExterior(m: CarMaterials): ExteriorParts {
     group.add(bp);
   }
 
-  // ── 휠 아치 라이너 ───────────────────────────────────────
+
+  // ── 휠 아치 라이너 + 블랙 클래딩 (C254 특징) ─────────────
   const linerMat = new THREE.MeshStandardMaterial({ color: 0x080808, roughness: 1, side: THREE.BackSide });
+  const archA = Math.asin(0.04 / 0.5);
   for (const ax of [AXLE_X, -AXLE_X]) {
     // 회전 후 theta = π 가 위쪽 → 아치 윗부분만
     const liner = new THREE.Mesh(new THREE.CylinderGeometry(0.445, 0.445, 1.74, 24, 1, true, Math.PI - 1.45, 2.9), linerMat);
     liner.rotation.x = Math.PI / 2;
     liner.position.set(ax, 0.36, 0);
     group.add(liner);
+    for (const s of [-1, 1]) {
+      const flare = new THREE.Mesh(extrudeZ(annulusSector(0.445, 0.53, Math.PI + archA, -archA), 0.045), m.cladding);
+      flare.position.set(ax, 0.36, s * 0.905 - 0.0225);
+      flare.castShadow = true;
+      group.add(flare);
+    }
+  }
+  for (const s of [-1, 1]) {
+    // 로커 클래딩 + 크롬 스트립
+    const rocker = new THREE.Mesh(roundedBox(1.98, 0.12, 0.06, 0.025), m.cladding);
+    rocker.position.set(0, 0.3, s * 0.905);
+    group.add(rocker);
+    const strip = new THREE.Mesh(roundedBox(1.9, 0.016, 0.012, 0.005), m.chrome);
+    strip.position.set(0, 0.368, s * 0.93);
+    group.add(strip);
   }
 
   // ── 전면 ─────────────────────────────────────────────────
-  const grille = new THREE.Mesh(panelYZ(roundedRect(1.04, 0.3, 0.07), 0.02), m.grille);
-  grille.position.set(2.37, 0.655, 0);
-  grille.rotation.z = 0.15;
+  const tilt = 0.14; // 앞면 위쪽이 뒤로 기울어짐
+  // 다이아몬드 그릴 (사다리꼴)
+  const grille = new THREE.Mesh(panelYZ(trapezoid(1.16, 0.98, 0.3, 0.07), 0.02), m.grille);
   normalizeUV(grille.geometry);
+  grille.position.set(2.372, 0.655, 0);
+  grille.rotation.z = tilt;
   group.add(grille);
-  // 그릴 크롬 테두리
-  const gFrame = new THREE.Mesh(panelYZ(frameShape(1.08, 0.335, 0.08, 0.018), 0.025), m.chrome);
-  gFrame.position.copy(grille.position).add(new THREE.Vector3(0.004, 0, 0));
-  gFrame.rotation.z = grille.rotation.z;
+  const gFrame = new THREE.Mesh(panelYZ(trapezoidFrame(1.2, 1.02, 0.335, 0.08, 0.022), 0.03), m.chrome);
+  gFrame.position.set(2.378, 0.655, 0);
+  gFrame.rotation.z = tilt;
   group.add(gFrame);
-
-  // 하단 공기흡입구 + 에어커튼
-  const intake = new THREE.Mesh(panelYZ(roundedRect(1.3, 0.16, 0.05), 0.02), m.blackMatte);
-  intake.position.set(2.345, 0.39, 0);
-  group.add(intake);
+  // 가로 크롬 루버 (별 양쪽)
   for (const s of [-1, 1]) {
-    const curtain = new THREE.Mesh(roundedBox(0.05, 0.2, 0.09, 0.02), m.blackGloss);
-    curtain.position.set(2.29, 0.5, s * 0.74);
-    curtain.rotation.y = s * 0.5;
-    group.add(curtain);
+    const louver = new THREE.Mesh(roundedBox(0.03, 0.034, 0.36, 0.012), m.chrome);
+    louver.position.set(2.392, 0.66, s * 0.32);
+    louver.rotation.z = tilt;
+    group.add(louver);
+    const louver2 = new THREE.Mesh(roundedBox(0.02, 0.012, 0.3, 0.005), m.chrome);
+    louver2.position.set(2.39, 0.632, s * 0.32);
+    group.add(louver2);
   }
+  // 그릴 중앙 삼각별
+  const gStar = buildEmblem(0.23, m.chrome, { backing: m.blackGloss });
+  gStar.position.set(2.405, 0.655, 0);
+  gStar.rotation.set(0, Math.PI / 2, 0);
+  group.add(gStar);
+  // 보닛 스탠딩 스타
+  const hood = buildEmblem(0.065, m.chrome, { depth: 0.004 });
+  hood.position.set(2.12, 0.925, 0);
+  hood.rotation.set(0, Math.PI / 2, 0);
+  group.add(hood);
+  const hoodBase = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.034, 0.012, 20), m.chrome);
+  hoodBase.position.set(2.12, 0.888, 0);
+  group.add(hoodBase);
 
-  // 헤드라이트 (슬림 LED + DRL)
+  // 헤드라이트: 그릴 윗모서리에서 시작해 펜더 쪽으로 감기는 슬림 램프 (앞면 + 코너 두 조각)
   const headlightAnchors: THREE.Object3D[] = [];
   for (const s of [-1, 1]) {
-    const hl = new THREE.Group();
-    hl.position.set(2.255, 0.815, s * 0.66);
-    hl.rotation.y = s * 0.28;
-    hl.rotation.z = 0.25;
-    hl.add(new THREE.Mesh(roundedBox(0.12, 0.085, 0.38, 0.03), m.headlightInner));
-    hl.add(new THREE.Mesh(roundedBox(0.125, 0.09, 0.385, 0.032), m.lensClear));
-    // 프로젝터 2개 + DRL 눈썹
-    for (const dz of [-0.06, 0.06]) {
-      const proj = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.02, 16), m.headBeam);
-      proj.rotation.z = Math.PI / 2;
-      proj.position.set(0.05, -0.005, dz - s * 0.03);
-      hl.add(proj);
+    const pieces: [number, number, number, number, number][] = [
+      // [중심 z, 폭, 위치 x, 회전 y(바깥쪽이 뒤로), 높이]
+      [0.66, 0.28, 2.37, 0.28, 0.095],
+      [0.8, 0.12, 2.315, 0.85, 0.07],
+    ];
+    for (const [cz, w, px, ry, h] of pieces) {
+      const lamp = new THREE.Group();
+      lamp.position.set(px, 0.765, s * cz);
+      lamp.rotation.order = 'YZX';
+      lamp.rotation.y = -s * ry;
+      lamp.rotation.z = tilt;
+      const housing = new THREE.Mesh(roundedBox(0.05, h, w, 0.02), m.headlightChrome);
+      lamp.add(housing);
+      const lens = new THREE.Mesh(roundedBox(0.052, h + 0.006, w + 0.006, 0.022), m.lensClear);
+      lamp.add(lens);
+      // DRL: 아래쪽 테두리 라인
+      const drl = new THREE.Mesh(roundedBox(0.008, 0.008, w - 0.02, 0.003), m.drl);
+      drl.position.set(0.026, -h / 2 + 0.012, 0);
+      lamp.add(drl);
+      if (w > 0.15) {
+        for (const u of [-0.06, 0.0, 0.06]) {
+          const proj = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.01, 16), m.headBeam);
+          proj.rotation.z = Math.PI / 2;
+          proj.position.set(0.024, 0.01, u);
+          lamp.add(proj);
+        }
+      }
+      group.add(lamp);
     }
-    const drl = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.01, 0.3), m.drl);
-    drl.position.set(0.058, 0.026, 0);
-    hl.add(drl);
-    const drlHook = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.045, 0.01), m.drl);
-    drlHook.position.set(0.058, 0.006, s * 0.145);
-    hl.add(drlHook);
-    group.add(hl);
     const anchor = new THREE.Object3D();
-    anchor.position.set(2.3, 0.8, s * 0.6);
+    anchor.position.set(2.3, 0.8, s * 0.65);
     group.add(anchor);
     headlightAnchors.push(anchor);
   }
 
+  // 하단 범퍼: 크롬 스마일 트림 + 흡기구 + 코너 인테이크
+  const smile = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(2.3, 0.47, -0.74), new THREE.Vector3(2.35, 0.33, -0.62), new THREE.Vector3(2.37, 0.3, 0),
+    new THREE.Vector3(2.35, 0.33, 0.62), new THREE.Vector3(2.3, 0.47, 0.74),
+  ]);
+  group.add(new THREE.Mesh(new THREE.TubeGeometry(smile, 48, 0.014, 8), m.chrome));
+  const intake = new THREE.Mesh(panelYZ(trapezoid(1.18, 1.1, 0.12, 0.04), 0.02), m.blackMatte);
+  intake.position.set(2.358, 0.385, 0);
+  group.add(intake);
+  for (let i = 0; i < 3; i++) {
+    const slat = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.008, 1.08), m.blackGloss);
+    slat.position.set(2.366, 0.35 + i * 0.033, 0);
+    group.add(slat);
+  }
+  for (const s of [-1, 1]) {
+    const corner = new THREE.Mesh(panelYZ(roundedRect(0.16, 0.13, 0.05), 0.02), m.grilleMesh);
+    normalizeUV(corner.geometry);
+    corner.position.set(2.29, 0.52, s * 0.74);
+    corner.rotation.y = -s * 0.55;
+    group.add(corner);
+  }
   // 앞 번호판
   const fPlate = new THREE.Mesh(new THREE.PlaneGeometry(0.52, 0.11), m.plate);
-  fPlate.position.set(2.372, 0.4, 0);
+  fPlate.position.set(2.372, 0.39, 0);
   fPlate.rotation.y = Math.PI / 2;
   group.add(fPlate);
 
   // ── 후면 ─────────────────────────────────────────────────
+  // 테일램프: 트렁크 위 슬림 램프(안쪽) + 펜더로 감기는 코너 조각, LED 라인
   for (const s of [-1, 1]) {
-    const tl = new THREE.Mesh(roundedBox(0.07, 0.07, 0.52, 0.025), m.taillight);
-    tl.position.set(-2.255, 0.975, s * 0.6);
-    tl.rotation.y = -s * 0.2;
-    tl.rotation.z = -0.35;
-    group.add(tl);
-    const tlInner = new THREE.Mesh(new THREE.BoxGeometry(0.01, 0.012, 0.44), m.taillight);
-    tlInner.position.set(-2.29, 0.99, s * 0.6);
-    tlInner.rotation.y = -s * 0.2;
-    group.add(tlInner);
-    // 후진등
-    const rev = new THREE.Mesh(new THREE.BoxGeometry(0.01, 0.03, 0.08), m.reverseLight);
-    rev.position.set(-2.33, 0.62, s * 0.45);
+    const pieces: [number, number, number, number][] = [
+      // [중심 z, 폭, x, 회전 y]
+      [0.56, 0.34, -2.348, 0.12],
+      [0.8, 0.13, -2.29, 0.85],
+    ];
+    for (const [cz, w, px, ry] of pieces) {
+      const tl = new THREE.Group();
+      tl.position.set(px, 0.935, s * cz);
+      tl.rotation.order = 'YZX';
+      tl.rotation.y = s * ry; // 바깥쪽 끝이 앞으로 감김
+      tl.rotation.z = -0.3;
+      tl.add(new THREE.Mesh(roundedBox(0.05, 0.06, w, 0.02), m.taillight));
+      const led = new THREE.Mesh(roundedBox(0.008, 0.009, w - 0.03, 0.004), m.taillightLed);
+      led.position.set(-0.026, -0.006, 0);
+      tl.add(led);
+      group.add(tl);
+    }
+    // 범퍼 반사판, 후진등
+    const refl = new THREE.Mesh(new THREE.BoxGeometry(0.01, 0.018, 0.2), m.taillight);
+    refl.position.set(-2.355, 0.47, s * 0.68);
+    group.add(refl);
+    const rev = new THREE.Mesh(new THREE.BoxGeometry(0.01, 0.025, 0.08), m.reverseLight);
+    rev.position.set(-2.35, 0.43, s * 0.45);
     group.add(rev);
-    // 머플러 팁 (크롬 사각)
-    const ex = new THREE.Mesh(roundedBox(0.03, 0.07, 0.3, 0.02), m.chrome);
-    ex.position.set(-2.345, 0.355, s * 0.56);
-    group.add(ex);
+    // 사다리꼴 크롬 머플러 팁
+    const tip = new THREE.Mesh(panelYZ(trapezoidFrame(0.26, 0.2, 0.075, 0.03, 0.014), 0.03), m.chrome);
+    tip.position.set(-2.37, 0.3, s * 0.6);
+    tip.rotation.y = Math.PI;
+    group.add(tip);
+    const tipIn = new THREE.Mesh(panelYZ(trapezoid(0.23, 0.17, 0.05, 0.02), 0.01), m.blackMatte);
+    tipIn.position.set(-2.36, 0.3, s * 0.6);
+    group.add(tipIn);
   }
-  // 트렁크 리드 블랙 스트립 + 보조 제동등
-  const strip = new THREE.Mesh(roundedBox(0.04, 0.05, 0.62, 0.015), m.blackGloss);
-  strip.position.set(-2.262, 0.98, 0);
-  strip.rotation.z = -0.35;
-  group.add(strip);
+  const band = new THREE.Mesh(roundedBox(0.05, 0.045, 0.82, 0.015), m.blackGloss);
+  band.position.set(-2.34, 0.95, 0);
+  band.rotation.z = -0.3;
+  group.add(band);
   const cbl = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.012, 0.36), m.taillight);
   cbl.position.set(-2.13, 1.075, 0);
   group.add(cbl);
-  // 디퓨저
-  const diff = new THREE.Mesh(panelYZ(roundedRect(1.45, 0.14, 0.05), 0.04), m.blackMatte);
-  diff.position.set(-2.33, 0.33, 0);
-  group.add(diff);
+  // 트렁크 삼각별 + 모델 배지
+  const tStar = buildEmblem(0.14, m.chrome, { backing: m.paint });
+  tStar.position.set(-2.372, 0.79, 0);
+  tStar.rotation.set(0, -Math.PI / 2, -0.12);
+  group.add(tStar);
+  for (const [text, z] of [['GLC 300', 0.5], ['4MATIC', -0.52]] as [string, number][]) {
+    const badge = new THREE.Mesh(new THREE.PlaneGeometry(0.2, 0.034), badgeMaterial(text));
+    badge.position.set(-2.265, 1.012, z);
+    badge.rotation.set(0, -Math.PI / 2, 0);
+    badge.rotateX(-0.35);
+    group.add(badge);
+  }
+  // 하단 블랙 범퍼 + 크롬 디퓨저
+  const lowerRear = new THREE.Mesh(roundedBox(0.08, 0.2, 1.74, 0.04), m.cladding);
+  lowerRear.position.set(-2.33, 0.34, 0);
+  group.add(lowerRear);
+  const diffuser = new THREE.Mesh(roundedBox(0.04, 0.03, 1.0, 0.012), m.chrome);
+  diffuser.position.set(-2.37, 0.27, 0);
+  group.add(diffuser);
   // 뒤 번호판
   const rPlate = new THREE.Mesh(new THREE.PlaneGeometry(0.52, 0.11), m.plate);
-  rPlate.position.set(-2.346, 0.66, 0);
+  rPlate.position.set(-2.385, 0.54, 0);
   rPlate.rotation.y = -Math.PI / 2;
   group.add(rPlate);
 
   // ── 측면 디테일 ──────────────────────────────────────────
   for (const s of [-1, 1]) {
-    // 사이드 미러
+    // 사이드 미러 (바디 컬러 캡 + 블랙 베이스 + 방향지시등)
     const mirror = new THREE.Group();
-    mirror.position.set(0.5, 1.13, s * 0.93);
-    const cap = new THREE.Mesh(roundedBox(0.16, 0.12, 0.22, 0.05), m.paint);
-    cap.position.set(-0.02, 0.0, s * 0.1);
+    mirror.position.set(0.52, 1.1, s * 0.9);
+    const base = new THREE.Mesh(roundedBox(0.14, 0.06, 0.08, 0.02), m.blackGloss);
+    mirror.add(base);
+    const cap = new THREE.Mesh(roundedBox(0.13, 0.13, 0.24, 0.055), m.paint);
+    cap.position.set(-0.01, 0.07, s * 0.13);
+    cap.rotation.y = s * 0.12;
     cap.castShadow = true;
     mirror.add(cap);
-    const glass = new THREE.Mesh(new THREE.PlaneGeometry(0.19, 0.095), m.chrome);
+    const glass = new THREE.Mesh(new THREE.PlaneGeometry(0.2, 0.1), m.mirrorGlass);
     glass.rotation.y = -Math.PI / 2;
-    glass.position.set(-0.102, 0, s * 0.1);
+    glass.position.set(-0.077, 0.07, s * 0.13);
     mirror.add(glass);
-    const arm = new THREE.Mesh(roundedBox(0.1, 0.05, 0.1, 0.02), m.blackGloss);
-    arm.position.set(0, -0.04, 0);
-    mirror.add(arm);
-    const turn = new THREE.Mesh(new THREE.BoxGeometry(0.01, 0.01, 0.12), m.drl);
-    turn.position.set(0.0, -0.05, s * 0.12);
+    const turn = new THREE.Mesh(new THREE.BoxGeometry(0.01, 0.008, 0.13), m.drl);
+    turn.position.set(0.04, 0.02, s * 0.16);
     mirror.add(turn);
     group.add(mirror);
 
@@ -314,26 +412,99 @@ export function buildExterior(m: CarMaterials): ExteriorParts {
     const belt = new THREE.Mesh(new THREE.BoxGeometry(2.05, 0.012, 0.012), m.chrome);
     belt.position.set(-0.52, 1.075, s * 0.785);
     group.add(belt);
-    // 사이드 스커트 크롬
-    const skirt = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.02, 0.012), m.chrome);
-    skirt.position.set(0, 0.33, s * 0.925);
-    group.add(skirt);
-    // 도어 손잡이
-    for (const hx of [-0.22, -1.2]) {
-      const h = new THREE.Mesh(roundedBox(0.22, 0.03, 0.025, 0.012), m.chrome);
-      h.position.set(hx, 0.95, s * 0.893);
+    // 도어 손잡이 (크롬 그립형)
+    for (const hx of [-0.12, -1.12]) {
+      const h = new THREE.Mesh(roundedBox(0.2, 0.035, 0.03, 0.014), m.chrome);
+      h.position.set(hx, 0.975, s * 0.885);
       group.add(h);
+      const recess = new THREE.Mesh(roundedBox(0.22, 0.05, 0.01, 0.02), m.blackMatte);
+      recess.position.set(hx, 0.975, s * 0.872);
+      group.add(recess);
     }
     // 도어 분할선
     for (const sx of [0.74, -0.56, -1.47]) {
-      const seam = new THREE.Mesh(new THREE.BoxGeometry(0.004, 0.66, 0.006), m.blackMatte);
-      seam.position.set(sx, 0.68, s * 0.918);
+      const seam = new THREE.Mesh(new THREE.BoxGeometry(0.004, 0.62, 0.006), m.blackMatte);
+      seam.position.set(sx, 0.7, s * 0.918);
       seam.rotation.x = s * -0.07;
       group.add(seam);
+    }
+    // 주유구 (오른쪽 뒤)
+    if (s > 0) {
+      const fuel = new THREE.Mesh(new THREE.CircleGeometry(0.075, 24), m.paintSeam);
+      fuel.position.set(-1.9, 0.92, 0.905);
+      group.add(fuel);
     }
   }
 
   return { group, headlightAnchors };
+}
+
+/** 사다리꼴(위 넓고 아래 좁음) 둥근 모서리 Shape, 중심 정렬 */
+function trapezoid(topW: number, botW: number, h: number, r: number): THREE.Shape {
+  const s = new THREE.Shape();
+  const t = topW / 2, b = botW / 2, y0 = -h / 2, y1 = h / 2;
+  s.moveTo(-b + r, y0);
+  s.lineTo(b - r, y0);
+  s.quadraticCurveTo(b, y0, b + (t - b) * (r / h), y0 + r);
+  s.lineTo(t - (t - b) * (r / h), y1 - r);
+  s.quadraticCurveTo(t, y1, t - r, y1);
+  s.lineTo(-t + r, y1);
+  s.quadraticCurveTo(-t, y1, -t + (t - b) * (r / h), y1 - r);
+  s.lineTo(-b - (t - b) * (r / h), y0 + r);
+  s.quadraticCurveTo(-b, y0, -b + r, y0);
+  return s;
+}
+
+function trapezoidFrame(topW: number, botW: number, h: number, r: number, t: number): THREE.Shape {
+  const outer = trapezoid(topW, botW, h, r);
+  const inner = trapezoid(topW - 2 * t, botW - 2 * t, h - 2 * t, Math.max(0.01, r - t));
+  outer.holes.push(new THREE.Path(inner.getPoints(8).reverse()));
+  return outer;
+}
+
+/** 환형 부채꼴 (휠 아치 클래딩) */
+function annulusSector(r0: number, r1: number, a0: number, a1: number): THREE.Shape {
+  const s = new THREE.Shape();
+  const n = 24;
+  for (let i = 0; i <= n; i++) {
+    const a = a0 + ((a1 - a0) * i) / n;
+    if (i === 0) s.moveTo(Math.cos(a) * r1, Math.sin(a) * r1);
+    else s.lineTo(Math.cos(a) * r1, Math.sin(a) * r1);
+  }
+  for (let i = n; i >= 0; i--) {
+    const a = a0 + ((a1 - a0) * i) / n;
+    s.lineTo(Math.cos(a) * r0, Math.sin(a) * r0);
+  }
+  s.closePath();
+  return s;
+}
+
+function extrudeZ(shape: THREE.Shape, depth: number): THREE.BufferGeometry {
+  return new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: true, bevelThickness: 0.008, bevelSize: 0.008, bevelSegments: 2, curveSegments: 12 });
+}
+
+const badgeCache = new Map<string, THREE.Material>();
+function badgeMaterial(text: string): THREE.Material {
+  let m = badgeCache.get(text);
+  if (m) return m;
+  const c = document.createElement('canvas');
+  c.width = 512;
+  c.height = 88;
+  const g = c.getContext('2d')!;
+  const grd = g.createLinearGradient(0, 10, 0, 78);
+  grd.addColorStop(0, '#ffffff');
+  grd.addColorStop(0.5, '#8d9196');
+  grd.addColorStop(1, '#e8e8e8');
+  g.fillStyle = grd;
+  g.font = '600 66px "Noto Sans KR", Arial, sans-serif';
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.fillText(text, 256, 46);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  m = new THREE.MeshStandardMaterial({ map: tex, transparent: true, metalness: 0.9, roughness: 0.2, alphaTest: 0.2 });
+  badgeCache.set(text, m);
+  return m;
 }
 
 /**
@@ -360,13 +531,6 @@ function analyticCapNormals(geo: THREE.BufferGeometry, deform: (v: THREE.Vector3
     nrm.setXYZ(i, n.x, n.y, n.z);
   }
   nrm.needsUpdate = true;
-}
-
-function frameShape(w: number, h: number, r: number, t: number): THREE.Shape {
-  const outer = roundedRect(w, h, r);
-  const inner = roundedRect(w - 2 * t, h - 2 * t, Math.max(0.01, r - t));
-  outer.holes.push(new THREE.Path(inner.getPoints(12).reverse()));
-  return outer;
 }
 
 function normalizeUV(geo: THREE.BufferGeometry): void {

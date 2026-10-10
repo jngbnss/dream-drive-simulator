@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { CarMaterials } from './materials';
 import { roundedBox } from './geometry';
+import { buildEmblem } from './Emblem';
 
 /**
  * 20인치 5-트윈스포크 휠 + 235/45 R20 근사 타이어 + 브레이크.
@@ -78,7 +79,7 @@ export function buildWheel(m: CarMaterials, radius: number, side: number, front:
   lip.position.z = 0.02;
   face.add(lip);
   for (let i = 0; i < 5; i++) {
-    for (const off of [-0.11, 0.11]) {
+    for (const off of [-0.075, 0.075]) {
       const s = new THREE.Mesh(g.spoke, m.rim);
       s.rotation.z = (i / 5) * Math.PI * 2 + off;
       s.position.z = 0.006;
@@ -88,8 +89,9 @@ export function buildWheel(m: CarMaterials, radius: number, side: number, front:
   }
   const hub = new THREE.Mesh(g.hub, m.rim);
   face.add(hub);
-  const cap = new THREE.Mesh(new THREE.CircleGeometry(0.035, 24), m.chrome);
-  cap.position.z = 0.026;
+  // 센터캡 삼각별
+  const cap = buildEmblem(0.07, m.chrome, { backing: m.blackGloss, depth: 0.003 });
+  cap.position.z = 0.027;
   face.add(cap);
 
   // 브레이크 (회전하지 않음)

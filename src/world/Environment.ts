@@ -19,7 +19,7 @@ interface Preset {
 }
 
 const PRESETS: Record<TimeOfDay, Preset> = {
-  day: { elevation: 52, azimuth: 160, sunColor: 0xfff4e5, sunIntensity: 3.2, hemiSky: 0xcfe3ff, hemiGround: 0x6b6458, hemiIntensity: 1.1, exposure: 0.75, fog: 0xbcd0e0, fogDensity: 0.00045, turbidity: 6, rayleigh: 1.4 },
+  day: { elevation: 52, azimuth: 160, sunColor: 0xfff4e5, sunIntensity: 3.2, hemiSky: 0xcfe3ff, hemiGround: 0x6b6458, hemiIntensity: 1.1, exposure: 0.75, fog: 0xbcd0e0, fogDensity: 0.0006, turbidity: 6, rayleigh: 1.4 },
   sunset: { elevation: 5, azimuth: 250, sunColor: 0xffb06a, sunIntensity: 2.6, hemiSky: 0xf2b6a0, hemiGround: 0x403040, hemiIntensity: 0.7, exposure: 0.62, fog: 0xd99a7a, fogDensity: 0.0006, turbidity: 9, rayleigh: 2.6 },
   night: { elevation: 30, azimuth: 120, sunColor: 0x9fb4ff, sunIntensity: 0.45, hemiSky: 0x2c3c5c, hemiGround: 0x1a1a20, hemiIntensity: 0.75, exposure: 1.15, fog: 0x0b1020, fogDensity: 0.0009, turbidity: 2, rayleigh: 0.2 },
 };
@@ -37,7 +37,7 @@ export class Environment {
 
   constructor(private readonly scene: THREE.Scene, private readonly renderer: THREE.WebGLRenderer) {
     this.pmrem = new THREE.PMREMGenerator(renderer);
-    this.sky.scale.setScalar(20000);
+    this.sky.scale.setScalar(6000);
     scene.add(this.sky);
     this.nightSky = makeNightSky();
     scene.add(this.nightSky);
@@ -155,7 +155,7 @@ function makeNightSky(): THREE.Mesh {
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   const mesh = new THREE.Mesh(
-    new THREE.SphereGeometry(15000, 32, 16),
+    new THREE.SphereGeometry(3000, 32, 16),
     new THREE.MeshBasicMaterial({ map: tex, side: THREE.BackSide, fog: false, depthWrite: false }),
   );
   mesh.renderOrder = -1;

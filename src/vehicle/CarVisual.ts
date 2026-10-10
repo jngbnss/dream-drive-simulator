@@ -133,6 +133,7 @@ export class CarVisual {
 
     // 제동등·후진등
     this.materials.taillight.emissiveIntensity = (t.braking ? 4.5 : this.lightsOn ? 1.6 : 0.9);
+    this.materials.taillightLed.emissiveIntensity = t.braking ? 7 : this.lightsOn ? 3.5 : 2.2;
     this.materials.reverseLight.emissiveIntensity = t.reversing ? 2 : 0;
 
     // 계기판은 20Hz로 갱신

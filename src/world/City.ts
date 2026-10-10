@@ -16,7 +16,6 @@ const ROOFS = ['#5a5b5e', '#6b6c6f', '#4a4c50', '#76736d'];
 
 interface Seg { road: number; x1: number; z1: number; x2: number; z2: number }
 interface Chunk { wp: number[]; wn: number[]; wuv: number[]; wc: number[]; wi: number[]; rp: number[]; rc: number[]; ri: number[]; cp: number[]; ci: number[] }
-interface SignalLamps { red: THREE.InstancedMesh; yellow: THREE.InstancedMesh; green: THREE.InstancedMesh; phase: Float32Array }
 export interface RoadHit { road: MapRoad; x: number; z: number; heading: number; dist: number }
 
 /** OSM 기반 맵 데이터를 Three.js 메시와 Rapier 콜라이더로 변환합니다. */
@@ -25,8 +24,6 @@ export class City {
   readonly facadeMaterial: THREE.MeshStandardMaterial;
   readonly waterMaterial: THREE.MeshStandardMaterial;
   private readonly grid = new Map<string, Seg[]>();
-  private readonly signalLamps: SignalLamps | null;
-  private lastSignalTick = -1;
   stats = { roads: 0, buildings: 0, trees: 0, signals: 0, triangles: 0, buildMs: 0 };
 
   constructor(readonly map: MapData, R: Rapier, world: RAPIER.World, onProgress: (f: number, label: string) => void) {
@@ -75,12 +72,11 @@ export class City {
     this.buildBuildings(R, world, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9 }));
 
     // ── 가로수 ──────────────────────────────────────────
-    onProgress(0.8, '가로수');
-    this.buildTrees(map, R, world);
+
+
 
     // ── 신호등 ──────────────────────────────────────────
-    onProgress(0.9, '신호등');
-    this.signalLamps = this.buildSignals(map);
+
 
     this.group.traverse((o) => {
       const m = o as THREE.Mesh;
@@ -348,160 +344,6 @@ export class City {
     }
   }
 
-  // ── 가로수 ──────────────────────────────────────────────
-  private buildTrees(map: MapData, R: Rapier, world: RAPIER.World) {
-    const positions: number[] = [];
-    let seed = 1;
-    const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-    for (const r of map.roads) {
-      if (r.c < 2 || r.c > 4 || r.b) continue;
-      const spacing = r.c === 2 ? 14 : 18;
-      const P: [number, number][] = [];
-      for (let i = 0; i < r.p.length; i += 2) P.push([r.p[i] / 10, r.p[i + 1] / 10]);
-      const jset = new Set(r.j);
-      let carry = spacing / 2;
-      for (let i = 0; i < P.length - 1; i++) {
-        const [x1, z1] = P[i], [x2, z2] = P[i + 1];
-        const len = Math.hypot(x2 - x1, z2 - z1);
-        if (len < 1) continue;
-        const dx = (x2 - x1) / len, dz = (z2 - z1) / len;
-        for (let d = carry; d < len; d += spacing) {
-          if ((jset.has(i) && d < 18) || (jset.has(i + 1) && len - d < 18)) continue; // 교차로 근처는 비움
-          const px = x1 + dx * d, pz = z1 + dz * d;
-          const off = r.w / 2 + 1.6;
-          const sides = r.o ? [1] : [-1, 1]; // 일방통행은 오른쪽만
-          for (const s of sides) positions.push(px - dz * off * s, pz + dx * off * s, 0.85 + rand() * 0.35);
-        }
-        carry = (((carry - len) % spacing) + spacing) % spacing;
-      }
-    }
-    // 공원 내부 나무
-    for (const p of map.parks) {
-      let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
-      const poly: [number, number][] = [];
-      for (let i = 0; i < p.length; i += 2) {
-        const x = p[i] / 10, z = p[i + 1] / 10;
-        poly.push([x, z]);
-        minX = Math.min(minX, x); maxX = Math.max(maxX, x); minZ = Math.min(minZ, z); maxZ = Math.max(maxZ, z);
-      }
-      const count = Math.min(400, Math.floor(((maxX - minX) * (maxZ - minZ)) / 260));
-      for (let k = 0; k < count; k++) {
-        const x = minX + rand() * (maxX - minX), z = minZ + rand() * (maxZ - minZ);
-        if (pointInPoly(x, z, poly)) positions.push(x, z, 0.8 + rand() * 0.6);
-      }
-    }
-    const count = positions.length / 3;
-    this.stats.trees = count;
-    if (!count) return;
-    const trunkGeo = new THREE.CylinderGeometry(0.14, 0.2, 3.2, 6).translate(0, 1.6, 0);
-    const crownGeo = new THREE.IcosahedronGeometry(2.3, 1).scale(1, 1.25, 1).translate(0, 4.8, 0);
-    const trunks = new THREE.InstancedMesh(trunkGeo, new THREE.MeshStandardMaterial({ color: 0x4a3b2e, roughness: 1 }), count);
-    const crowns = new THREE.InstancedMesh(crownGeo, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, flatShading: true }), count);
-    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), c = new THREE.Color(), up = new THREE.Vector3(0, 1, 0);
-    for (let i = 0; i < count; i++) {
-      const s = positions[i * 3 + 2];
-      q.setFromAxisAngle(up, rand() * Math.PI * 2);
-      m.compose(new THREE.Vector3(positions[i * 3], 0, positions[i * 3 + 1]), q, new THREE.Vector3(s, s, s));
-      trunks.setMatrixAt(i, m);
-      crowns.setMatrixAt(i, m);
-      c.setHSL(0.22 + rand() * 0.08, 0.45 + rand() * 0.2, 0.22 + rand() * 0.1);
-      crowns.setColorAt(i, c);
-    }
-    trunks.castShadow = crowns.castShadow = true;
-    crowns.receiveShadow = true;
-    trunks.computeBoundingSphere();
-    crowns.computeBoundingSphere();
-    this.group.add(trunks, crowns);
-    // 나무 기둥 충돌 (차가 통과하지 않도록)
-    for (let i = 0; i < count; i++) {
-      world.createCollider(R.ColliderDesc.cylinder(1.5, 0.25).setTranslation(positions[i * 3], 1.5, positions[i * 3 + 1]).setFriction(0.3));
-    }
-  }
-
-  // ── 신호등 (가로형 3구: 적·황·녹) ───────────────────────
-  private buildSignals(map: MapData): SignalLamps | null {
-    const n = map.signals.length / 2;
-    if (!n) return null;
-    const poleGeo = new THREE.CylinderGeometry(0.12, 0.15, 6, 8).translate(0, 3, 0);
-    const armGeo = new THREE.BoxGeometry(0.12, 0.12, 1).translate(0, 0, 0.5);
-    const headGeo = new THREE.BoxGeometry(0.35, 0.42, 1.25);
-    const lampGeo = new THREE.CircleGeometry(0.14, 12);
-    const darkMat = new THREE.MeshStandardMaterial({ color: 0x2e3135, roughness: 0.7, metalness: 0.4 });
-    const poles = new THREE.InstancedMesh(poleGeo, darkMat, n);
-    const arms = new THREE.InstancedMesh(armGeo, darkMat, n);
-    const heads = new THREE.InstancedMesh(headGeo, new THREE.MeshStandardMaterial({ color: 0x15171a, roughness: 0.6 }), n);
-    const lampMat = () => new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false });
-    const red = new THREE.InstancedMesh(lampGeo, lampMat(), n);
-    const yellow = new THREE.InstancedMesh(lampGeo, lampMat(), n);
-    const green = new THREE.InstancedMesh(lampGeo, lampMat(), n);
-    const phase = new Float32Array(n);
-    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), lq = new THREE.Quaternion();
-    const one = new THREE.Vector3(1, 1, 1), yAxis = new THREE.Vector3(0, 1, 0);
-    let placed = 0;
-    for (let i = 0; i < n; i++) {
-      const x = map.signals[i * 2] / 10, z = map.signals[i * 2 + 1] / 10;
-      const near = this.nearestRoad(x, z, 25);
-      if (!near) continue;
-      const h = near.heading;
-      const fx = Math.cos(h), fz = -Math.sin(h);
-      const rx = -fz, rz = fx; // 진행 방향 오른쪽
-      const half = near.road.w / 2 + 0.8;
-      const px = near.x + rx * half, pz = near.z + rz * half;
-      // 기둥은 도로 오른쪽, 팔은 도로 위(왼쪽)로, 램프는 다가오는 차를 향함
-      const armLen = Math.min(near.road.w * 0.55, 9);
-      q.setFromAxisAngle(yAxis, h + Math.PI); // 로컬 +Z → 진행 왼쪽
-      m.compose(new THREE.Vector3(px, 0, pz), q, one);
-      poles.setMatrixAt(placed, m);
-      m.compose(new THREE.Vector3(px, 5.8, pz), q, new THREE.Vector3(1, 1, armLen));
-      arms.setMatrixAt(placed, m);
-      const hx = px - rx * (armLen - 0.8), hz = pz - rz * (armLen - 0.8);
-      m.compose(new THREE.Vector3(hx, 5.55, hz), q, one);
-      heads.setMatrixAt(placed, m);
-      lq.setFromAxisAngle(yAxis, h - Math.PI / 2);
-      // 운전자 기준 왼쪽부터 적·황·녹
-      for (const [k, lm] of [[0.4, red], [0, yellow], [-0.4, green]] as [number, THREE.InstancedMesh][]) {
-        m.compose(new THREE.Vector3(hx - fx * 0.18 - rx * k, 5.55, hz - fz * 0.18 - rz * k), lq, one);
-        lm.setMatrixAt(placed, m);
-      }
-      phase[placed] = (Math.abs(fx) > Math.abs(fz) ? 0 : 0.5) + Math.abs((x * 0.013 + z * 0.007) % 0.05);
-      placed++;
-    }
-    const off = new THREE.Color(0.06, 0.06, 0.06);
-    for (const im of [poles, arms, heads, red, yellow, green]) {
-      im.count = placed;
-      im.computeBoundingSphere();
-      this.group.add(im);
-    }
-    for (let i = 0; i < placed; i++) {
-      red.setColorAt(i, off);
-      yellow.setColorAt(i, off);
-      green.setColorAt(i, off);
-    }
-    poles.castShadow = arms.castShadow = heads.castShadow = true;
-    this.stats.signals = placed;
-    return { red, yellow, green, phase };
-  }
-
-  /** 신호 주기: 녹색 22s → 황색 3s → 적색 25s (방향별 반대 위상) */
-  update(time: number) {
-    const s = this.signalLamps;
-    if (!s) return;
-    const tick = Math.floor(time * 4);
-    if (tick === this.lastSignalTick) return;
-    this.lastSignalTick = tick;
-    const cycle = 50;
-    const R = new THREE.Color(3, 0.15, 0.1), Y = new THREE.Color(3, 1.9, 0.1), G = new THREE.Color(0.1, 2.6, 1.2);
-    const off = new THREE.Color(0.06, 0.06, 0.06);
-    for (let i = 0; i < s.red.count; i++) {
-      const t = ((time / cycle + s.phase[i]) % 1) * cycle;
-      const st = t < 22 ? 2 : t < 25 ? 1 : 0;
-      s.red.setColorAt(i, st === 0 ? R : off);
-      s.yellow.setColorAt(i, st === 1 ? Y : off);
-      s.green.setColorAt(i, st === 2 ? G : off);
-    }
-    for (const im of [s.red, s.yellow, s.green]) if (im.instanceColor) im.instanceColor.needsUpdate = true;
-  }
-
   setNight(night: boolean) {
     this.facadeMaterial.emissiveIntensity = night ? 0.9 : 0;
   }
@@ -526,15 +368,6 @@ function flatPolys(polys: number[][], y: number, mat: THREE.Material): THREE.Mes
   const mesh = new THREE.Mesh(g, mat);
   mesh.receiveShadow = true;
   return mesh;
-}
-
-function pointInPoly(x: number, z: number, poly: [number, number][]) {
-  let inside = false;
-  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
-    const [xi, zi] = poly[i], [xj, zj] = poly[j];
-    if (zi > z !== zj > z && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) inside = !inside;
-  }
-  return inside;
 }
 
 /** 평면 지오메트리의 법선이 위(+Y)를 향하도록 삼각형 방향을 보정 */

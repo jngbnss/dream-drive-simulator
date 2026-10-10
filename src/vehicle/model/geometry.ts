@@ -32,6 +32,8 @@ export interface TriInfo {
   group: number;
   /** 변형 전 무게중심 */
   c0: THREE.Vector3;
+  /** 삼각형 x 범위의 중간 (같은 사각형의 두 삼각형이 같은 값을 가져 경계가 톱니 모양이 되지 않음) */
+  xmid: number;
   /** 변형 후 무게중심 / 법선 */
   c: THREE.Vector3;
   n: THREE.Vector3;
@@ -57,7 +59,7 @@ export function sculpt<K extends string>(
   const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
   const a0 = new THREE.Vector3(), b0 = new THREE.Vector3(), c0 = new THREE.Vector3();
   const e1 = new THREE.Vector3(), e2 = new THREE.Vector3();
-  const info: TriInfo = { group: 0, c0: new THREE.Vector3(), c: new THREE.Vector3(), n: new THREE.Vector3() };
+  const info: TriInfo = { group: 0, xmid: 0, c0: new THREE.Vector3(), c: new THREE.Vector3(), n: new THREE.Vector3() };
   for (let t = 0; t < triCount; t++) {
     a0.fromBufferAttribute(pos, t * 3);
     b0.fromBufferAttribute(pos, t * 3 + 1);
@@ -66,6 +68,7 @@ export function sculpt<K extends string>(
     deform(a); deform(b); deform(c);
     info.group = groupOf[t];
     info.c0.copy(a0).add(b0).add(c0).multiplyScalar(1 / 3);
+    info.xmid = (Math.min(a0.x, b0.x, c0.x) + Math.max(a0.x, b0.x, c0.x)) / 2;
     info.c.copy(a).add(b).add(c).multiplyScalar(1 / 3);
     e1.subVectors(b, a);
     e2.subVectors(c, a);
