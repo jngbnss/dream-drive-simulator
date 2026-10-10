@@ -27,6 +27,8 @@ export class Navigator {
   private maneuvers: Maneuver[] = [];
   private progress = 0;
   private seg = 0;
+  private projX = 0;
+  private projZ = 0;
   private offTimer = 0;
   private lastSpoken = '';
   destName = '';
@@ -85,6 +87,12 @@ export class Navigator {
     return true;
   }
 
+  /** 경로 위 현재 위치 (지도에서 지나온 구간을 지우는 데 사용) */
+  get current(): { seg: number; x: number; z: number } | null {
+    if (!this.route) return null;
+    return this.progress > 0 ? { seg: this.seg, x: this.projX, z: this.projZ } : null;
+  }
+
   clear() {
     this.route = null;
     this.cum = null;
@@ -126,7 +134,7 @@ export class Navigator {
       const dx = x2 - x1, dz = z2 - z1, L2 = dx * dx + dz * dz || 1;
       const t = Math.max(0, Math.min(1, ((x - x1) * dx + (z - z1) * dz) / L2));
       const d = Math.hypot(x1 + dx * t - x, z1 + dz * t - z);
-      if (d < best) { best = d; bestSeg = i; bestProg = c[i] + Math.sqrt(L2) * t; }
+      if (d < best) { best = d; bestSeg = i; bestProg = c[i] + Math.sqrt(L2) * t; this.projX = x1 + dx * t; this.projZ = z1 + dz * t; }
     }
     this.seg = bestSeg;
     this.progress = Math.max(this.progress - 5, bestProg);

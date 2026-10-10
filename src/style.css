@@ -230,3 +230,19 @@ body.touch #nav-banner .nb-dist { font-size: 18px; }
 .nav-list li span { font-size: 12px; color: var(--muted); }
 .nav-foot { display: flex; gap: 8px; margin-top: 10px; }
 .nav-foot button { flex: 1; font-size: 13px; }
+
+/* ── GTA5 스타일 레이더 ───────────────────────────────── */
+#minimap { position: static !important; width: 100% !important; height: auto !important; border-radius: 0 !important; border: none !important; box-shadow: none !important; display: block; }
+#radar {
+  position: absolute; left: 24px; bottom: 22px; width: 300px;
+  transform: perspective(520px) rotateX(28deg); transform-origin: 50% 100%;
+  border: 3px solid rgba(0,0,0,0.75); box-shadow: 0 8px 22px rgba(0,0,0,0.45); background: #000;
+}
+.radar-bars { display: flex; gap: 3px; height: 7px; background: #000; padding-top: 3px; }
+.radar-bars span { flex: 1; height: 100%; background: rgba(255,255,255,0.12); }
+.radar-bars i { display: block; height: 100%; }
+.radar-bars .hp { background: linear-gradient(90deg, #5aa35a, #6fbf6a); width: 0; }
+.radar-bars .ar { background: linear-gradient(90deg, #3b8fd6, #5aa8ef); width: 0; }
+.radar-bars { position: relative; }
+#hud-nav { bottom: 250px; }
+body.touch #radar { left: calc(10px + env(safe-area-inset-left)); top: calc(10px + env(safe-area-inset-top)); bottom: auto; width: 170px; transform: none; }

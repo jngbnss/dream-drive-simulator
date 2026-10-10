@@ -6,6 +6,7 @@ import { buildInterior } from './model/CarInterior';
 import { CenterDisplay, ClusterDisplay, type DisplayState } from './model/Displays';
 import { AMBIENTS, CarMaterials } from './model/materials';
 import { buildWheel, type WheelVisual } from './model/Wheel';
+import { mergeStatic } from './model/geometry';
 import type { VehiclePhysics } from './VehiclePhysics';
 
 const STEERING_RATIO = 13;
@@ -30,6 +31,9 @@ export class CarVisual {
   private displayTimer = 0;
   private accent: string = AMBIENTS[0].color;
   odometerKm = 0;
+  drawCallsSaved = 0;
+  /** 계기판·MBUX 캔버스 갱신 간격 (3인칭에서는 거의 안 보이므로 느리게) */
+  screenInterval = 0.05;
   lightsOn = false;
   night = false;
   roadName = '';
@@ -49,6 +53,11 @@ export class CarVisual {
     const int = buildInterior(this.materials, this.cluster.texture, this.center.texture);
     this.body.add(int.group);
     this.steeringSpin = int.steeringWheel.userData.spin as THREE.Object3D;
+    // 정적 부품을 재질별로 병합해 드로우콜 절감 (회전하는 스티어링 휠은 제외)
+    const before = countMeshes(this.body);
+    mergeStatic(ext.group);
+    mergeStatic(int.group, [int.steeringWheel]);
+    this.drawCallsSaved = before - countMeshes(this.body);
 
     // 휠: 섀시 로컬 좌표(서스펜션 장착점 y = 0)
     physics.wheelPositions.forEach((p, i) => {
@@ -143,7 +152,7 @@ export class CarVisual {
     // 계기판은 20Hz로 갱신
     this.displayTimer -= dt;
     if (this.displayTimer <= 0) {
-      this.displayTimer = 0.05;
+      this.displayTimer = this.screenInterval;
       const s: DisplayState = {
         speedKmh: t.speedKmh, rpm: t.rpm, gear: t.gearLabel, x: b.x, z: b.z, heading: p.heading,
         roadName: this.roadName, accent: this.accent, odometerKm: this.odometerKm, night: this.night, braking: t.braking, nav: this.navText,
@@ -154,4 +163,10 @@ export class CarVisual {
       this.center.texture.needsUpdate = true;
     }
   }
+}
+
+function countMeshes(o: THREE.Object3D): number {
+  let n = 0;
+  o.traverse((c) => { if ((c as THREE.Mesh).isMesh) n++; });
+  return n;
 }

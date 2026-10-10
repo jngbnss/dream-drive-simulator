@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { MapDrawer } from '../../world/MiniMap';
+import { MBUX_PALETTE, type MapDrawer } from '../../world/MiniMap';
 import { formatDist, maneuverIcon, maneuverText, type Guidance } from '../../nav/Navigator';
 
 export interface DisplayState {
@@ -154,7 +154,7 @@ export class CenterDisplay {
     g.clip();
     if (this.raster) {
       g.translate(0, mapTop);
-      this.raster.draw(g, s.x, s.z, s.heading, W, mapH, 420 + s.speedKmh * 3, 0.68);
+      this.raster.draw(g, s.x, s.z, s.heading, W, mapH, 420 + s.speedKmh * 3, 0.68, MBUX_PALETTE);
     }
     g.restore();
     // 차량 아이콘

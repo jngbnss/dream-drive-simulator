@@ -375,9 +375,12 @@ async function boot() {
   // ── 루프 ────────────────────────────────────────────────
   let roadTimer = 0;
   const camPos = new THREE.Vector3();
+  const prof = { frame: 0, start: 0, region: 0, render: 0, total: 0, physics: 0 };
+  (window as unknown as { __long: unknown[] }).__long = [];
   const loop = new GameLoop({
     begin() {
       perf.beginFrame();
+      prof.frame = performance.now();
     },
     fixedUpdate(dt) {
       input.update(dt, physics.telemetry.forwardSpeed);
@@ -387,10 +390,13 @@ async function boot() {
       if (physics.body.translation().y < -20) resetToRoad();
     },
     render(dt, alpha) {
+      prof.start = performance.now();
       car.update(dt, alpha);
       cameras.update(dt);
       const p = car.root.position;
+      const tu0 = performance.now();
       region.update(p.x, p.z);
+      prof.region = performance.now() - tu0;
       {
         const showroomOn = !driving && cameras.mode === 'showroom';
         const target = showroomOn ? (time === 'night' ? 1 : time === 'sunset' ? 0.55 : 0.25) : 0;
@@ -401,7 +407,9 @@ async function boot() {
         showroomFill.position.copy(cameras.camera.position).add(new THREE.Vector3(0, 1.5, 0));
       }
       env.follow(p);
-      car.materials.setCabinView(cameras.mode === 'cockpit' || cameras.mode === 'interior');
+      const inCabin = cameras.mode === 'cockpit' || cameras.mode === 'interior';
+      car.materials.setCabinView(inCabin);
+      car.screenInterval = inCabin ? 0.05 : driving ? 0.5 : 0.2;
 
       if ((roadTimer -= dt) <= 0) {
         roadTimer = 0.3;
@@ -411,6 +419,8 @@ async function boot() {
       const t = physics.telemetry;
       if (nav && nav.guidance.active) {
         nav.update(dt, p.x, p.z, Math.abs(t.forwardSpeed));
+        mapDrawer.routeFrom = nav.current;
+        mapDrawer.route = nav.route;
         hud.setGuidance(nav.guidance);
         car.navText = nav.guidance.next ? nav.guidance : null;
         if (nav.guidance.arrived) {
@@ -424,7 +434,12 @@ async function boot() {
       if (beacon.visible) (beacon.material as THREE.MeshBasicMaterial).opacity = 0.25 + Math.sin(performance.now() / 300) * 0.1;
       audio.update(t.rpm, t.load, t.speedKmh, t.skid, cameras.mode === 'cockpit', driving);
       if (driving) hud.update(dt, t.speedKmh, t.gearLabel, t.rpm, car.roadName, p.x, p.z, physics.heading, AMBIENTS[ambientIdx].color);
+      const tr0 = performance.now();
       renderer.render(scene, cameras.camera);
+      prof.render = performance.now() - tr0;
+      prof.physics = prof.start - prof.frame;
+      prof.total = performance.now() - prof.frame;
+      if (prof.total > 30) (window as unknown as { __long: unknown[] }).__long?.push({ ...prof });
       cameras.camera.getWorldPosition(camPos);
       perf.endFrame(
         `타일     ${region.tileCount}\n건물     ${region.stats.buildings}\n타일 생성 ${region.stats.buildMs.toFixed(0)} ms\n` +

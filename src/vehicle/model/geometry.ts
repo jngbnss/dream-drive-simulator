@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
+import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 
 export type Vec2 = [number, number];
 
@@ -135,4 +135,51 @@ export function panelYZ(shape: THREE.Shape, thickness: number): THREE.BufferGeom
   g.translate(0, 0, -thickness / 2);
   g.rotateY(Math.PI / 2); // 이제 두께는 X축, shape의 x → -Z
   return g;
+}
+
+/**
+ * 정적인 부품 메시들을 재질별로 하나로 합쳐 드로우콜을 줄입니다.
+ * keep 안의 하위 트리(회전하는 스티어링 휠 등)는 그대로 둡니다.
+ */
+export function mergeStatic(root: THREE.Object3D, keep: THREE.Object3D[] = []): number {
+  root.updateMatrixWorld(true);
+  const inv = new THREE.Matrix4().copy(root.matrixWorld).invert();
+  const isKept = (o: THREE.Object3D) => {
+    for (let p: THREE.Object3D | null = o; p && p !== root; p = p.parent) if (keep.includes(p)) return true;
+    return false;
+  };
+  const groups = new Map<THREE.Material, { geos: THREE.BufferGeometry[]; cast: boolean; receive: boolean; order: number }>();
+  const victims: THREE.Mesh[] = [];
+  root.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (!m.isMesh || Array.isArray(m.material) || isKept(m)) return;
+    const mat = m.material as THREE.MeshStandardMaterial;
+    let g = m.geometry.index ? m.geometry.toNonIndexed() : m.geometry.clone();
+    g.applyMatrix4(new THREE.Matrix4().multiplyMatrices(inv, m.matrixWorld));
+    // 속성 통일: position + normal (+ uv: 텍스처 재질만)
+    for (const name of Object.keys(g.attributes)) if (!['position', 'normal', 'uv'].includes(name)) g.deleteAttribute(name);
+    if (!mat.map) g.deleteAttribute('uv');
+    else if (!g.getAttribute('uv')) g.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(g.getAttribute('position').count * 2), 2));
+    if (!g.getAttribute('normal')) g.computeVertexNormals();
+    g.clearGroups();
+    let entry = groups.get(mat);
+    if (!entry) groups.set(mat, (entry = { geos: [], cast: false, receive: false, order: m.renderOrder }));
+    entry.geos.push(g);
+    entry.cast ||= m.castShadow;
+    entry.receive ||= m.receiveShadow;
+    victims.push(m);
+  });
+  for (const v of victims) v.parent?.remove(v);
+  let count = 0;
+  for (const [mat, e] of groups) {
+    const merged = mergeGeometries(e.geos, false);
+    if (!merged) continue;
+    const mesh = new THREE.Mesh(merged, mat);
+    mesh.castShadow = e.cast;
+    mesh.receiveShadow = e.receive;
+    mesh.renderOrder = e.order;
+    root.add(mesh);
+    count++;
+  }
+  return count;
 }

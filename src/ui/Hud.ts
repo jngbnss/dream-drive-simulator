@@ -54,35 +54,50 @@ export class Hud {
     if (this.toastTimer > 0 && (this.toastTimer -= dt) <= 0) this.toastEl.classList.remove('show');
 
     if ((this.miniTimer -= dt) > 0) return;
-    this.miniTimer = 1 / 20;
+    this.miniTimer = 1 / 24;
+    // GTA5 레이더: 사각형, 차량은 아래쪽 중앙, 속도가 빠를수록 넓게
     const g = this.g, w = this.mini.width, h = this.mini.height;
-    g.save();
+    const cy = 0.68;
     g.clearRect(0, 0, w, h);
+    this.drawer.draw(g, x, z, heading, w, h, 230 + speedKmh * 2.2, cy);
+    // 플레이어 화살표 (GTA처럼 흰 화살표 + 그림자)
+    g.save();
+    g.translate(w / 2, h * cy);
+    g.shadowColor = 'rgba(0,0,0,0.6)';
+    g.shadowBlur = 4;
+    g.fillStyle = '#f4f4f4';
     g.beginPath();
-    g.arc(w / 2, h / 2, w / 2, 0, Math.PI * 2);
-    g.clip();
-    this.drawer.draw(g, x, z, heading, w, h, 360 + speedKmh * 2, 0.5);
-    g.translate(w / 2, h / 2);
-    g.fillStyle = accent;
-    g.strokeStyle = '#fff';
-    g.lineWidth = 1.5;
-    g.beginPath();
-    g.moveTo(0, -9);
-    g.lineTo(6.5, 7);
-    g.lineTo(0, 3.5);
-    g.lineTo(-6.5, 7);
+    g.moveTo(0, -11);
+    g.lineTo(7.5, 8);
+    g.lineTo(0, 4);
+    g.lineTo(-7.5, 8);
     g.closePath();
     g.fill();
-    g.stroke();
     g.restore();
-    // 북쪽 표시
+    void accent;
+    // 북쪽(N) 블립: 사각형 테두리 위 북쪽 방향 지점
+    const a = heading - Math.PI / 2; // 지도 회전각
+    const nx = Math.sin(a), ny = -Math.cos(a); // 화면에서 북쪽 방향
+    const ox = w / 2, oy = h * cy;
+    const tx = nx > 0 ? (w - 12 - ox) / nx : nx < 0 ? (12 - ox) / nx : Infinity;
+    const ty = ny > 0 ? (h - 12 - oy) / ny : ny < 0 ? (12 - oy) / ny : Infinity;
+    const tt = Math.min(tx, ty);
     g.save();
-    g.translate(w / 2, h / 2);
-    g.rotate(heading - Math.PI / 2);
-    g.fillStyle = '#ff5a4f';
-    g.font = '700 13px "Noto Sans KR", sans-serif';
+    g.fillStyle = 'rgba(20,20,20,0.85)';
+    g.beginPath();
+    g.arc(ox + nx * tt, oy + ny * tt, 9, 0, Math.PI * 2);
+    g.fill();
+    g.fillStyle = '#ffffff';
+    g.font = '700 12px "Noto Sans KR", sans-serif';
     g.textAlign = 'center';
-    g.fillText('N', 0, -h / 2 + 18);
+    g.textBaseline = 'middle';
+    g.fillText('N', ox + nx * tt, oy + ny * tt + 0.5);
     g.restore();
+    // 아래 막대: 녹색 = 속도, 파랑 = RPM (GTA의 체력·방어구 막대 자리)
+    this.hp.style.width = `${Math.min(100, (speedKmh / 200) * 100)}%`;
+    this.ar.style.width = `${Math.min(100, (rpm / 6500) * 100)}%`;
   }
+
+  private readonly hp = document.querySelector('#radar .hp') as HTMLElement;
+  private readonly ar = document.querySelector('#radar .ar') as HTMLElement;
 }
