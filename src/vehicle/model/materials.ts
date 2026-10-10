@@ -27,13 +27,14 @@ export class CarMaterials {
     color: PAINTS[0].color, metalness: 0.7, roughness: 0.32, clearcoat: 1, clearcoatRoughness: 0.03,
   });
   readonly glass = new THREE.MeshPhysicalMaterial({
-    color: 0x0a0d12, metalness: 0, roughness: 0.03, transparent: true, opacity: 0.62,
-    side: THREE.FrontSide, envMapIntensity: 2.2, depthWrite: false,
+    color: 0x080a0e, metalness: 0, roughness: 0.03, transparent: true, opacity: 0.78,
+    side: THREE.DoubleSide, envMapIntensity: 2.2, depthWrite: false,
   });
-  readonly glassInner = new THREE.MeshStandardMaterial({
-    color: 0x0a0d12, metalness: 0, roughness: 0.05, transparent: true, opacity: 0.12,
-    side: THREE.BackSide, depthWrite: false,
-  });
+
+  /** 실내 시점에서는 유리를 옅게, 외부에서는 실차처럼 짙은 틴트 + 반사 */
+  setCabinView(inside: boolean): void {
+    this.glass.opacity = inside ? 0.14 : 0.78;
+  }
   readonly blackGloss = new THREE.MeshStandardMaterial({ color: 0x050506, metalness: 0.2, roughness: 0.12 });
   readonly blackMatte = new THREE.MeshStandardMaterial({ color: 0x0c0c0d, metalness: 0, roughness: 0.75 });
   readonly chrome = new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 1, roughness: 0.08 });

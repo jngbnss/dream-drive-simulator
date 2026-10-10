@@ -112,8 +112,77 @@ button.primary:hover { filter: brightness(1.08); }
 #hud:not(.hidden) ~ #attribution { right: 220px; }
 #attribution a { color: inherit; }
 
-@media (max-width: 640px) {
-  .panel { left: 16px; right: 16px; top: auto; bottom: 16px; width: auto; max-height: 60%; }
+/* ── 모바일 / 터치 ───────────────────────────────────── */
+#touch { display: none; }
+body.touch #touch { display: block; }
+body.touch #help { display: none; }
+body.touch #scene, #touch, #touch * { touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+#touch button { pointer-events: auto; -webkit-tap-highlight-color: transparent; }
+.t-steer, .t-pedals {
+  position: absolute; bottom: calc(18px + env(safe-area-inset-bottom)); display: flex; gap: 12px;
+}
+.t-steer { left: calc(16px + env(safe-area-inset-left)); }
+.t-pedals { right: calc(16px + env(safe-area-inset-right)); align-items: flex-end; }
+.t-steer button {
+  width: 78px; height: 78px; border-radius: 50%; font-size: 26px;
+  background: rgba(15,16,20,0.55); border: 1px solid rgba(255,255,255,0.25); backdrop-filter: blur(6px);
+}
+.t-pedals button {
+  white-space: nowrap; padding: 0;
+  width: 76px; border-radius: 16px; font-size: 13px; font-weight: 700;
+  background: rgba(15,16,20,0.55); border: 1px solid rgba(255,255,255,0.25); backdrop-filter: blur(6px);
+}
+.t-pedals .brake { height: 78px; }
+.t-pedals .gas { height: 112px; background: rgba(217,199,163,0.35); border-color: rgba(217,199,163,0.7); }
+#touch button.down { background: rgba(217,199,163,0.75); color: #17140f; transform: scale(0.96); }
+.t-top {
+  position: absolute; top: calc(10px + env(safe-area-inset-top)); right: calc(10px + env(safe-area-inset-right));
+  display: flex; gap: 6px;
+}
+.t-top button { padding: 7px 11px; font-size: 12px; background: rgba(15,16,20,0.55); border-radius: 10px; }
+
+body.touch #speedo { right: 50%; transform: translateX(50%); bottom: calc(14px + env(safe-area-inset-bottom)); width: auto; text-align: center; }
+body.touch #speed { font-size: 44px; }
+body.touch #gear { position: static; font-size: 16px; }
+body.touch #rpm-bar { width: 120px; margin: 6px auto 0; }
+body.touch #minimap {
+  left: calc(10px + env(safe-area-inset-left)); top: calc(10px + env(safe-area-inset-top)); bottom: auto;
+  width: 110px; height: 110px;
+}
+body.touch #road-name { top: calc(12px + env(safe-area-inset-top)); font-size: 13px; padding: 4px 12px; }
+body.touch #attribution { display: none; }
+body.touch #hud:not(.hidden) ~ #attribution { right: 8px; }
+
+/* 쇼룸 패널: 휴대폰에서는 아래쪽 시트 */
+@media (max-width: 760px), (max-height: 520px) {
+  .panel {
+    left: 8px; right: 8px; top: auto; bottom: calc(8px + env(safe-area-inset-bottom)); width: auto;
+    max-height: 46%; padding: 14px 16px; border-radius: 16px;
+  }
+  .panel h1 { font-size: 18px; margin-top: 4px; }
+  .model-name { margin-bottom: 4px; }
+  .section-label { margin: 10px 0 6px; }
+  .swatch { width: 28px; height: 28px; }
+  .row { margin: 14px -16px -14px; position: sticky; bottom: -14px; background: rgb(18,19,24); padding: 10px 16px 12px; border-top: 1px solid var(--line); }
+  .hint { display: none; }
   #help { display: none; }
-  #minimap { width: 120px; height: 120px; }
+}
+/* 가로 휴대폰: 패널을 왼쪽 세로로 */
+@media (max-height: 520px) and (orientation: landscape) {
+  .panel { left: 8px; right: auto; top: 8px; bottom: 8px; width: 290px; max-height: none; }
+}
+@media (max-height: 520px) {
+  body.touch .t-steer button { width: 64px; height: 64px; }
+  body.touch .t-pedals .gas { height: 92px; }
+  body.touch .t-pedals .brake { height: 64px; }
+}
+
+/* 세로 휴대폰 주행: 속도계는 페달 위, 도로명은 기능 버튼 아래 */
+@media (orientation: portrait) {
+  body.touch #speedo { bottom: calc(150px + env(safe-area-inset-bottom)); }
+  body.touch #road-name { top: calc(56px + env(safe-area-inset-top)); }
+  body.touch .t-top { left: calc(130px + env(safe-area-inset-left)); justify-content: flex-end; flex-wrap: wrap; }
+  body.touch .t-steer button { width: 70px; height: 70px; }
+  body.touch .t-pedals button {
+  white-space: nowrap; padding: 0; width: 70px; }
 }

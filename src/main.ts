@@ -6,10 +6,12 @@ import { FIXED_DT, GameLoop } from './core/GameLoop';
 import { PerfMonitor } from './debug/PerfMonitor';
 import { InputSystem } from './input/Input';
 import { Hud } from './ui/Hud';
+import { isTouchDevice, TouchControls } from './ui/TouchControls';
 import { CarVisual } from './vehicle/CarVisual';
 import { AMBIENTS, PAINTS } from './vehicle/model/materials';
 import { GLC_COUPE_INSPIRED } from './vehicle/VehicleConfig';
 import { VehiclePhysics } from './vehicle/VehiclePhysics';
+import { Traffic } from './ai/Traffic';
 import { City } from './world/City';
 import { Environment, type TimeOfDay } from './world/Environment';
 import { ROAD_CLASS_NAMES, type MapData } from './world/MapData';
@@ -57,6 +59,9 @@ async function fetchMap(url: string, onProgress: (f: number) => void): Promise<M
   return JSON.parse(new TextDecoder().decode(buf));
 }
 
+const mobile = isTouchDevice();
+if (mobile) document.body.classList.add('touch');
+
 async function boot() {
   const tStart = performance.now();
   progress(0.02, '물리 엔진 준비');
@@ -69,7 +74,8 @@ async function boot() {
   // ── 렌더러·장면 ──────────────────────────────────────────
   const canvas = $<HTMLCanvasElement>('scene');
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-  renderer.setPixelRatio(Math.min(devicePixelRatio, 1.75));
+  // 휴대폰은 해상도를 낮춰 발열·배터리 부담을 줄임
+  renderer.setPixelRatio(Math.min(devicePixelRatio, mobile ? 1.25 : 1.75));
   renderer.setSize(innerWidth, innerHeight);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -88,6 +94,8 @@ async function boot() {
   progress(0.82, '내비게이션 지도');
   await nextFrame();
   const raster = new MapRaster(map);
+  const traffic = new Traffic(map, RAPIER, world);
+  scene.add(traffic.group);
 
   // ── 차량 ────────────────────────────────────────────────
   progress(0.88, '드림카 준비');
@@ -186,6 +194,7 @@ async function boot() {
     city.setNight(night);
     car.setNight(night);
     car.setLights(night);
+    traffic.setNight(night);
     timeBtns.forEach((b) => b.classList.toggle('active', b.dataset.time === t));
     store.set('time', t);
   }
@@ -210,7 +219,8 @@ async function boot() {
     $('showroom').classList.add('hidden');
     hud.show(true);
     cameras.setMode('cockpit');
-    hud.toast('C 키로 3인칭 ↔ 운전석 시점 전환', 3.5);
+    if (mobile && innerHeight > innerWidth) hud.toast('휴대폰을 가로로 돌리면 더 편해요', 4);
+    else hud.toast(mobile ? '‘시점’ 버튼으로 3인칭 ↔ 운전석 전환' : 'C 키로 3인칭 ↔ 운전석 시점 전환', 3.5);
     canvas.focus();
   }
   function stopDriving() {
@@ -240,11 +250,19 @@ async function boot() {
     hud.toast('도로로 복귀했습니다');
   }
 
+  const toggleLights = () => {
+    car.setLights(!car.lightsOn);
+    hud.toast(car.lightsOn ? '헤드라이트 켜짐' : '헤드라이트 꺼짐');
+  };
+  if (mobile) {
+    new TouchControls(input, { view: () => cameras.cycleDriveView(), lights: toggleLights, menu: stopDriving, reset: resetToRoad });
+  }
+
   addEventListener('keydown', (e) => {
     if (!driving) return;
     switch (e.code) {
       case 'KeyC': cameras.cycleDriveView(); break;
-      case 'KeyL': car.setLights(!car.lightsOn); hud.toast(car.lightsOn ? '헤드라이트 켜짐' : '헤드라이트 꺼짐'); break;
+      case 'KeyL': toggleLights(); break;
       case 'KeyR': resetToRoad(); break;
       case 'KeyM': hud.toast(audio.toggleMute() ? '음소거' : '소리 켜짐'); break;
       case 'KeyH': hud.toggleHelp(); break;
@@ -272,6 +290,11 @@ async function boot() {
     fixedUpdate(dt) {
       input.update(dt, physics.telemetry.forwardSpeed);
       physics.fixedUpdate(dt, input.state);
+      {
+        const pt = physics.body.translation();
+        const pv = physics.body.linvel();
+        traffic.fixedUpdate(dt, pt.x, pt.z, pv.x, pv.z);
+      }
       perf.measurePhysics(() => world.step());
       physics.afterStep();
       if (physics.body.translation().y < -20) resetToRoad();
@@ -292,6 +315,8 @@ async function boot() {
       }
       env.follow(car.root.position);
       city.update(clock);
+      traffic.render();
+      car.materials.setCabinView(cameras.mode === 'cockpit' || cameras.mode === 'interior');
 
       if ((roadTimer -= dt) <= 0) {
         roadTimer = 0.3;
@@ -309,14 +334,15 @@ async function boot() {
       cameras.camera.getWorldPosition(camPos);
       perf.endFrame(
         `건물     ${city.stats.buildings}\n도로     ${city.stats.roads}\n가로수   ${city.stats.trees}\n` +
-        `맵 생성  ${city.stats.buildMs.toFixed(0)} ms\n위치     ${camPos.x.toFixed(0)}, ${camPos.z.toFixed(0)}`,
+        `교통차량 ${traffic.activeCount}
+맵 생성  ${city.stats.buildMs.toFixed(0)} ms\n위치     ${camPos.x.toFixed(0)}, ${camPos.z.toFixed(0)}`,
       );
     },
   });
 
   progress(1, '출발 준비 완료');
   console.info(`[DreamDrive] 맵 다운로드 ${(tMap - tStart).toFixed(0)}ms, 도시 생성 ${city.stats.buildMs.toFixed(0)}ms, 전체 ${(performance.now() - tStart).toFixed(0)}ms`, city.stats);
-  (window as unknown as { __dd: unknown }).__dd = { perf, city, physics, cameras, renderer };
+  (window as unknown as { __dd: unknown }).__dd = { perf, city, physics, cameras, renderer, traffic };
   loop.start();
   $('loading').classList.add('fade');
   $('showroom').classList.remove('hidden');

@@ -224,8 +224,8 @@ export class VehiclePhysics {
     t.reversing = dtn.gear < 0;
     t.braking = !c.park && (brake > 0.1 || c.handbrake);
     this.brakeLights = t.braking;
-    t.longAccel = (fwdSpeed - this.lastVel.fwd) / dt;
-    t.latAccel = (latSpeed - this.lastVel.lat) / dt;
+    t.longAccel += ((fwdSpeed - this.lastVel.fwd) / dt - t.longAccel) * 0.15;
+    t.latAccel += ((latSpeed - this.lastVel.lat) / dt - t.latAccel) * 0.15;
     this.lastVel.fwd = fwdSpeed;
     this.lastVel.lat = latSpeed;
     let skid = 0;

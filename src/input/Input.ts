@@ -12,7 +12,7 @@ export function createControlState(): ControlState {
   return { throttle: 0, brake: 0, steer: 0, handbrake: false, park: true };
 }
 
-type ActionKey = 'up' | 'down' | 'left' | 'right' | 'handbrake';
+export type ActionKey = 'up' | 'down' | 'left' | 'right' | 'handbrake';
 
 const KEYMAP: Record<string, ActionKey> = {
   KeyW: 'up', ArrowUp: 'up',
@@ -54,6 +54,12 @@ export class InputSystem {
 
   clearPressed(): void {
     this.pressedOnce.clear();
+  }
+
+  /** 터치 버튼 등 가상 입력 */
+  press(action: ActionKey, on: boolean): void {
+    if (on) this.held.add(action);
+    else this.held.delete(action);
   }
 
   /**

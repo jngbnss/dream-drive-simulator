@@ -104,12 +104,10 @@ export function buildExterior(m: CarMaterials): ExteriorParts {
     group.add(mesh);
     return mesh;
   };
-  // 유리: 바깥면(반사·짙은 틴트) + 안쪽면(옅은 틴트, 실내에서 밖이 잘 보이도록)
+  // 유리: 양면. 투명도는 카메라가 실내/실외인지에 따라 CarVisual에서 바꿈
   const addGlass = (geo: THREE.BufferGeometry, name: string) => {
     const outer = add(geo, m.glass, name, false);
     outer.renderOrder = 2;
-    const inner = add(geo, m.glassInner, `${name}_Inner`, false);
-    inner.renderOrder = 2;
   };
 
   // ── 하부 차체 ────────────────────────────────────────────

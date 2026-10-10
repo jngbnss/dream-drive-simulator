@@ -108,11 +108,19 @@ export class CarVisual {
     // 차체 롤/피치 (스프링-댐퍼): 가속 시 뒤로, 제동 시 앞으로, 코너링 시 바깥으로
     const targetRoll = THREE.MathUtils.clamp(-t.latAccel * 0.0065, -0.06, 0.06);
     const targetPitch = THREE.MathUtils.clamp(t.longAccel * 0.0048, -0.045, 0.045);
+    // 느린 기기(긴 프레임)에서도 발산하지 않도록 작은 스텝으로 나눠 적분
     const k = 70, c = 11;
-    this.rollVel += ((targetRoll - this.roll) * k - this.rollVel * c) * dt;
-    this.pitchVel += ((targetPitch - this.pitch) * k - this.pitchVel * c) * dt;
-    this.roll += this.rollVel * dt;
-    this.pitch += this.pitchVel * dt;
+    const n = Math.min(30, Math.ceil(dt / (1 / 120)));
+    const h = n > 0 ? dt / n : 0;
+    for (let i = 0; i < n; i++) {
+      this.rollVel += ((targetRoll - this.roll) * k - this.rollVel * c) * h;
+      this.pitchVel += ((targetPitch - this.pitch) * k - this.pitchVel * c) * h;
+      this.roll += this.rollVel * h;
+      this.pitch += this.pitchVel * h;
+    }
+    if (!Number.isFinite(this.roll + this.pitch)) this.roll = this.pitch = this.rollVel = this.pitchVel = 0;
+    this.roll = THREE.MathUtils.clamp(this.roll, -0.08, 0.08);
+    this.pitch = THREE.MathUtils.clamp(this.pitch, -0.06, 0.06);
     this.body.rotation.set(this.roll, 0, this.pitch);
 
     for (let i = 0; i < 4; i++) {

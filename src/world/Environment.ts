@@ -43,7 +43,8 @@ export class Environment {
     scene.add(this.nightSky);
 
     this.sun.castShadow = true;
-    this.sun.shadow.mapSize.set(2048, 2048);
+    const s = matchMedia('(pointer: coarse)').matches ? 1024 : 2048; // 모바일은 그림자 해상도 절반
+    this.sun.shadow.mapSize.set(s, s);
     const cam = this.sun.shadow.camera;
     cam.left = -70; cam.right = 70; cam.top = 70; cam.bottom = -70;
     cam.near = 1; cam.far = 600;

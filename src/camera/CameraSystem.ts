@@ -42,7 +42,7 @@ export class CameraSystem {
     this.orbit.enableDamping = true;
     this.orbit.dampingFactor = 0.08;
     this.orbit.minDistance = 3.2;
-    this.orbit.maxDistance = 14;
+    this.orbit.maxDistance = 18;
     this.orbit.maxPolarAngle = Math.PI * 0.49;
     this.orbit.enablePan = false;
     this.orbit.autoRotate = true;
@@ -100,8 +100,11 @@ export class CameraSystem {
   /** 쇼룸 시작 구도: 차량 앞 3/4 각도 */
   frameCar(offset = new THREE.Vector3(4.6, 1.35, 3.4)) {
     const p = this.car.root.position;
-    this.camera.position.copy(p).add(offset.clone().applyQuaternion(this.car.root.quaternion));
-    this.orbit.target.copy(p).add(new THREE.Vector3(0, 0.3, 0));
+    // 세로 화면(휴대폰)은 화면 폭이 좁고 아래쪽을 패널이 가리므로 더 멀리서, 차를 화면 위쪽에 둠
+    const portrait = this.camera.aspect < 1;
+    const off = offset.clone().multiplyScalar(portrait ? 1.9 : 1);
+    this.camera.position.copy(p).add(off.applyQuaternion(this.car.root.quaternion));
+    this.orbit.target.copy(p).add(new THREE.Vector3(0, portrait ? -1.4 : 0.3, 0));
     this.orbit.update();
     this.blend = 1;
   }
@@ -125,7 +128,7 @@ export class CameraSystem {
 
     let fov = 50;
     if (this.mode === 'showroom') {
-      this.orbit.target.lerp(this.tmp.copy(carPos).add(new THREE.Vector3(0, 0.3, 0)), 1 - Math.exp(-dt * 6));
+      this.orbit.target.lerp(this.tmp.copy(carPos).add(new THREE.Vector3(0, this.camera.aspect < 1 ? -1.4 : 0.3, 0)), 1 - Math.exp(-dt * 6));
       if (!this.orbit.autoRotate && (this.autoRotateResume -= dt) <= 0) this.orbit.autoRotate = true;
       this.orbit.update(dt);
       fov = 45;
@@ -148,6 +151,9 @@ export class CameraSystem {
       cam.quaternion.copy(this.car.body.getWorldQuaternion(new THREE.Quaternion())).multiply(local);
       fov = this.mode === 'interior' ? 72 : 68;
     }
+
+    // 세로 화면은 가로 시야가 좁아지므로 세로 FOV를 넓혀 비슷한 가로 시야를 확보
+    if (this.camera.aspect < 1 && this.mode !== 'showroom') fov = Math.min(100, fov * 1.4);
 
     if (this.blend < 1) {
       this.blend = Math.min(1, this.blend + dt / 0.6);

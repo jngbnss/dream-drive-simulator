@@ -76,7 +76,7 @@ export class City {
 
     // ── 가로수 ──────────────────────────────────────────
     onProgress(0.8, '가로수');
-    this.buildTrees(map);
+    this.buildTrees(map, R, world);
 
     // ── 신호등 ──────────────────────────────────────────
     onProgress(0.9, '신호등');
@@ -349,7 +349,7 @@ export class City {
   }
 
   // ── 가로수 ──────────────────────────────────────────────
-  private buildTrees(map: MapData) {
+  private buildTrees(map: MapData, R: Rapier, world: RAPIER.World) {
     const positions: number[] = [];
     let seed = 1;
     const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
@@ -412,6 +412,10 @@ export class City {
     trunks.computeBoundingSphere();
     crowns.computeBoundingSphere();
     this.group.add(trunks, crowns);
+    // 나무 기둥 충돌 (차가 통과하지 않도록)
+    for (let i = 0; i < count; i++) {
+      world.createCollider(R.ColliderDesc.cylinder(1.5, 0.25).setTranslation(positions[i * 3], 1.5, positions[i * 3 + 1]).setFriction(0.3));
+    }
   }
 
   // ── 신호등 (가로형 3구: 적·황·녹) ───────────────────────
