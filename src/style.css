@@ -246,3 +246,52 @@ body.touch #nav-banner .nb-dist { font-size: 18px; }
 .radar-bars { position: relative; }
 #hud-nav { bottom: 250px; }
 body.touch #radar { left: calc(10px + env(safe-area-inset-left)); top: calc(10px + env(safe-area-inset-top)); bottom: auto; width: 170px; transform: none; }
+
+/* ── 모바일 조작 v2: 아날로그 핸들 패드 ─────────────────── */
+.t-steer { display: none !important; }
+.t-steerpad {
+  position: absolute; left: calc(12px + env(safe-area-inset-left)); bottom: calc(14px + env(safe-area-inset-bottom));
+  width: min(44vw, 300px); height: 120px; pointer-events: auto; touch-action: none;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+  border-radius: 22px; background: rgba(15,16,20,0.28); border: 1px solid rgba(255,255,255,0.14);
+}
+.t-steerpad.down { background: rgba(15,16,20,0.42); }
+.t-track { position: relative; width: 160px; height: 8px; border-radius: 4px; background: rgba(255,255,255,0.22); }
+.t-knob {
+  position: absolute; left: 50%; top: 50%; width: 54px; height: 54px; margin: -27px 0 0 -27px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fff, #c9c4b8 70%); box-shadow: 0 4px 14px rgba(0,0,0,0.45);
+  transition: transform 0.06s linear;
+}
+.t-steerpad.down .t-knob { transition: none; }
+.t-hint { font-size: 11px; color: rgba(255,255,255,0.7); margin-top: 26px; }
+.t-steerpad.tilt .t-hint::after { content: ' · 기울기 조향 중'; }
+.t-pedals button small { display: block; font-size: 9px; font-weight: 400; opacity: 0.75; margin-top: 2px; }
+body.touch .t-pedals .gas { width: 92px; height: 138px; }
+body.touch .t-pedals .brake { width: 86px; height: 96px; }
+.t-top button.active { border-color: var(--accent); color: var(--accent); }
+body.touch #speedo { bottom: calc(150px + env(safe-area-inset-bottom)); right: calc(16px + env(safe-area-inset-right)); left: auto; transform: none; text-align: right; }
+@media (max-height: 520px) {
+  .t-steerpad { height: 100px; }
+  body.touch .t-pedals .gas { height: 112px; }
+  body.touch .t-pedals .brake { height: 80px; }
+  body.touch #speedo { bottom: calc(126px + env(safe-area-inset-bottom)); }
+}
+@media (orientation: portrait) {
+  .t-steerpad { width: 52vw; }
+  .t-track { width: 120px; }
+}
+.t-more {
+  position: absolute; top: calc(52px + env(safe-area-inset-top)); right: calc(10px + env(safe-area-inset-right));
+  display: flex; flex-direction: column; gap: 6px; padding: 8px; border-radius: 14px;
+  background: rgba(15,16,20,0.85); backdrop-filter: blur(8px); border: 1px solid var(--line);
+}
+.t-more button { pointer-events: auto; padding: 10px 16px; font-size: 14px; text-align: left; }
+body.touch .t-top { left: auto; flex-wrap: nowrap; }
+body.touch #road-name { top: calc(58px + env(safe-area-inset-top)); }
+@media (orientation: portrait) {
+  body.touch .t-top { left: auto; }
+  .t-steerpad { width: 44vw; }
+  body.touch .t-pedals .gas { width: 76px; }
+  body.touch .t-pedals .brake { width: 70px; }
+  body.touch #road-name { top: calc(196px + env(safe-area-inset-top)); }
+}

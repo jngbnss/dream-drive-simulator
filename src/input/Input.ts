@@ -30,6 +30,8 @@ export class InputSystem {
   private readonly held = new Set<ActionKey>();
   private readonly pressedOnce = new Set<string>();
   enabled = false;
+  /** 터치 핸들·기울기 조향 값 (-1 오른쪽 .. 1 왼쪽), 사용하지 않으면 null */
+  analogSteer: number | null = null;
 
   constructor() {
     addEventListener('keydown', (e) => {
@@ -94,7 +96,9 @@ export class InputSystem {
     s.throttle = approach(s.throttle, throttle, 4, dt);
     s.brake = approach(s.brake, brake, 6, dt);
     // 복귀가 빠르고, 고속에서는 조향 속도를 늦춰 안정감을 줌
-    const steerRate = steerTarget === 0 ? 4.5 : 2.6 - Math.min(1.4, Math.abs(forwardSpeed) / 30);
+    // 터치 핸들·기울기 조향 (아날로그): 손가락 위치를 그대로 따라가도록 빠르게
+    if (this.analogSteer !== null) steerTarget = Math.max(-1, Math.min(1, this.analogSteer));
+    const steerRate = this.analogSteer !== null ? 6 : steerTarget === 0 ? 4.5 : 2.6 - Math.min(1.4, Math.abs(forwardSpeed) / 30);
     s.steer = approach(s.steer, steerTarget, steerRate, dt);
     s.handbrake = handbrake;
     s.park = false;
