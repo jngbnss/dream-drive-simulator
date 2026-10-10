@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import type { MapRaster } from '../../world/MapRaster';
+import type { MapDrawer } from '../../world/MiniMap';
+import { formatDist, maneuverIcon, maneuverText, type Guidance } from '../../nav/Navigator';
 
 export interface DisplayState {
   speedKmh: number;
@@ -13,6 +14,7 @@ export interface DisplayState {
   odometerKm: number;
   night: boolean;
   braking: boolean;
+  nav: Guidance | null;
 }
 
 const FONT = '"Noto Sans KR", system-ui, sans-serif';
@@ -129,7 +131,7 @@ export class CenterDisplay {
   private readonly g: CanvasRenderingContext2D;
   greeting = '';
 
-  constructor(private readonly raster: MapRaster | null) {
+  constructor(private readonly raster: MapDrawer | null) {
     this.canvas.width = 714;
     this.canvas.height = 1000;
     this.g = this.canvas.getContext('2d')!;
@@ -182,12 +184,23 @@ export class CenterDisplay {
     g.font = `400 24px ${FONT}`;
     g.fillText('5G  ·  18°C', W - 30, 46);
 
-    // 도로명 카드
+    // 도로명 카드 / 내비 회전 안내 카드
     g.textAlign = 'left';
-    roundRect(g, 24, mapTop + 18, W - 48, 74, 18, 'rgba(15,18,24,0.88)');
-    g.fillStyle = '#ffffff';
-    g.font = `500 32px ${FONT}`;
-    g.fillText(s.roadName || '주행 중', 48, mapTop + 66);
+    if (s.nav && s.nav.next) {
+      roundRect(g, 24, mapTop + 18, W - 48, 110, 18, 'rgba(20,90,200,0.92)');
+      g.fillStyle = '#ffffff';
+      g.font = `700 64px ${FONT}`;
+      g.fillText(maneuverIcon(s.nav.next.type), 44, mapTop + 98);
+      g.font = `700 40px ${FONT}`;
+      g.fillText(formatDist(s.nav.nextInM), 130, mapTop + 66);
+      g.font = `400 26px ${FONT}`;
+      g.fillText(`${maneuverText(s.nav.next.type)}${s.nav.next.road ? ` · ${s.nav.next.road}` : ''}`.slice(0, 24), 130, mapTop + 106);
+    } else {
+      roundRect(g, 24, mapTop + 18, W - 48, 74, 18, 'rgba(15,18,24,0.88)');
+      g.fillStyle = '#ffffff';
+      g.font = `500 32px ${FONT}`;
+      g.fillText(s.roadName || '주행 중', 48, mapTop + 66);
+    }
 
     // 인사 카드
     const cardY = mapTop + mapH + 16;

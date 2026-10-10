@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import type { MapRaster } from '../world/MapRaster';
+import type { MapDrawer } from '../world/MiniMap';
+import type { Guidance } from '../nav/Navigator';
 import { buildExterior } from './model/CarExterior';
 import { buildInterior } from './model/CarInterior';
 import { CenterDisplay, ClusterDisplay, type DisplayState } from './model/Displays';
@@ -33,7 +34,10 @@ export class CarVisual {
   night = false;
   roadName = '';
 
-  constructor(private readonly physics: VehiclePhysics, raster: MapRaster | null, plateText?: string) {
+  /** 진행 중인 내비 안내 (MBUX 화면 표시용) */
+  navText: Guidance | null = null;
+
+  constructor(private readonly physics: VehiclePhysics, raster: MapDrawer | null, plateText?: string) {
     this.materials = new CarMaterials(plateText);
     this.center = new CenterDisplay(raster);
     const cfg = physics.cfg;
@@ -142,7 +146,7 @@ export class CarVisual {
       this.displayTimer = 0.05;
       const s: DisplayState = {
         speedKmh: t.speedKmh, rpm: t.rpm, gear: t.gearLabel, x: b.x, z: b.z, heading: p.heading,
-        roadName: this.roadName, accent: this.accent, odometerKm: this.odometerKm, night: this.night, braking: t.braking,
+        roadName: this.roadName, accent: this.accent, odometerKm: this.odometerKm, night: this.night, braking: t.braking, nav: this.navText,
       };
       this.cluster.draw(s);
       this.cluster.texture.needsUpdate = true;

@@ -19,10 +19,13 @@
   "license": "MIT",
   "dependencies": {
     "@dimforge/rapier3d-compat": "0.14.0",
-    "three": "0.170.0"
+    "three": "0.170.0",
+    "tinyqueue": "^3.0.0"
   },
   "devDependencies": {
     "@types/three": "0.170.0",
+    "osm-pbf-parser": "^2.3.0",
+    "through2": "^4.0.2",
     "typescript": "5.7.2",
     "vite": "6.0.7",
     "vitest": "2.1.8"

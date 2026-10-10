@@ -14,6 +14,8 @@ export interface MapRoad {
   j: number[];
   /** 교량 */
   b?: 1;
+  /** 터널 */
+  t?: 1;
 }
 
 export interface MapBuilding {

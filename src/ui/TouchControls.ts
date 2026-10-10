@@ -5,6 +5,7 @@ export interface TouchActions {
   lights(): void;
   menu(): void;
   reset(): void;
+  nav(): void;
 }
 
 /** 휴대폰·태블릿용 화면 버튼: 왼쪽 조향, 오른쪽 브레이크·가속 페달, 위쪽 기능 버튼 */
@@ -23,6 +24,7 @@ export class TouchControls {
         <button data-a="up" class="gas" aria-label="가속">가속</button>
       </div>
       <div class="t-top">
+        <button data-f="nav">목적지</button>
         <button data-f="view">시점</button>
         <button data-f="lights">라이트</button>
         <button data-f="reset">복귀</button>
